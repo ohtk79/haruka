@@ -1,0 +1,48 @@
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Test results
+test-results/
+
+# CI .kbd validation output
+test-output/
+
+# Playwright
+/playwright-report/
+/blob-report/
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Public release snapshot
+.public-release/
+
+# Paraglide (auto-generated)
+/src/lib/paraglide/
