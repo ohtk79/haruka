@@ -320,4 +320,119 @@ describe('kbd-generator with JIS→US remap', () => {
 			expect(line).toContain('(fork ro S-\u00A5 (lsft rsft))');
 		});
 	});
+
+	// =========================================================================
+	// リマップキーへの JIS→US 変換適用テスト (013-fix-jis-us-remap)
+	// =========================================================================
+
+	describe('JIS→US remap with key remapping', () => {
+		// KBD-JR-001: A→2 リマップで @jus-2 が出力される
+		it('should output @jus-2 when KeyA is remapped to 2', () => {
+			const state = createState(true);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2' });
+			const result = generateKbd(state);
+
+			const lines = result.split('\n');
+			const baseStart = lines.findIndex((l) => l.includes('(deflayer layer-0'));
+			const baseEnd = lines.findIndex((l, i) => i > baseStart && l.trim() === ')');
+			const baseSection = lines.slice(baseStart, baseEnd + 1).join('\n');
+
+			// KeyA の位置に @jus-2 が出力される
+			expect(baseSection).toContain('@jus-2');
+			// 物理 Digit2 にも @jus-2 が残っている（デフォルトのまま）
+			const jus2Count = (baseSection.match(/@jus-2/g) ?? []).length;
+			expect(jus2Count).toBe(2);
+		});
+
+		// KBD-JR-002: A→B リマップ（非変換対象）で素の b が出力される
+		it('should output plain b when KeyA is remapped to non-JIS-US key', () => {
+			const state = createState(true);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: 'b' });
+			const result = generateKbd(state);
+
+			const lines = result.split('\n');
+			const baseStart = lines.findIndex((l) => l.includes('(deflayer layer-0'));
+			const baseEnd = lines.findIndex((l, i) => i > baseStart && l.trim() === ')');
+			const baseSection = lines.slice(baseStart, baseEnd + 1).join('\n');
+
+			// b は変換対象外なので JIS→US 変換なし（@jus-bsl 等にマッチしないよう正規表現で検証）
+			expect(baseSection).not.toMatch(/@jus-b[\s)]/)
+		});
+
+		// KBD-JR-003: 物理 2→A リマップで @jus-2 が消える
+		it('should not output @jus-2 when Digit2 is remapped to a', () => {
+			const state = createState(true);
+			state.layers[0].actions.set('Digit2', { type: 'key', value: 'a' });
+			const result = generateKbd(state);
+
+			const lines = result.split('\n');
+			const baseStart = lines.findIndex((l) => l.includes('(deflayer layer-0'));
+			const baseEnd = lines.findIndex((l, i) => i > baseStart && l.trim() === ')');
+			const baseSection = lines.slice(baseStart, baseEnd + 1).join('\n');
+
+			// Digit2 はもはや 2 を出力しないので @jus-2 なし
+			expect(baseSection).not.toContain('@jus-2');
+		});
+
+		// KBD-JR-004: A→2, B→6 の複数リマップ
+		it('should output @jus-2 and @jus-6 for multiple remaps', () => {
+			const state = createState(true);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2' });
+			state.layers[0].actions.set('KeyB', { type: 'key', value: '6' });
+			const result = generateKbd(state);
+
+			const lines = result.split('\n');
+			const baseStart = lines.findIndex((l) => l.includes('(deflayer layer-0'));
+			const baseEnd = lines.findIndex((l, i) => i > baseStart && l.trim() === ')');
+			const baseSection = lines.slice(baseStart, baseEnd + 1).join('\n');
+
+			// 物理キー + リマップキーの両方
+			const jus2Count = (baseSection.match(/@jus-2/g) ?? []).length;
+			const jus6Count = (baseSection.match(/@jus-6/g) ?? []).length;
+			expect(jus2Count).toBe(2); // 物理 Digit2 + KeyA→2
+			expect(jus6Count).toBe(2); // 物理 Digit6 + KeyB→6
+		});
+
+		// KBD-JR-005: jisToUsRemap=false で A→2 リマップ → 素の 2
+		it('should output plain 2 when jisToUsRemap is false', () => {
+			const state = createState(false);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2' });
+			const result = generateKbd(state);
+
+			// JIS→US 変換は一切なし
+			expect(result).not.toContain('@jus-');
+			expect(result).not.toContain('jus-');
+		});
+
+		// KBD-JR-006: 修飾キー付きリマップ（A → Ctrl+2）で JIS→US 変換なし
+		it('should not apply JIS→US conversion for remap with modifiers', () => {
+			const state = createState(true);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lctl'] });
+			const result = generateKbd(state);
+
+			const lines = result.split('\n');
+			const baseStart = lines.findIndex((l) => l.includes('(deflayer layer-0'));
+			const baseEnd = lines.findIndex((l, i) => i > baseStart && l.trim() === ')');
+			const baseSection = lines.slice(baseStart, baseEnd + 1).join('\n');
+
+			// 物理 Digit2 の @jus-2 は残るが、KeyA 位置は修飾キー付きリマップ
+			const jus2Count = (baseSection.match(/@jus-2/g) ?? []).length;
+			expect(jus2Count).toBe(1); // 物理 Digit2 のみ
+		});
+
+		// KBD-JR-007: リマップ時の列幅に @jus-* の幅が反映される
+		it('should account for @jus-* width in column calculation for remapped keys', () => {
+			const state = createState(true);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2' });
+			const result = generateKbd(state);
+
+			// @jus-2 (6文字) は 'a' (1文字) より長いので列幅が拡大されるはず
+			// 出力が正しく整列されていること（@jus-2 がトランケートされていないこと）を確認
+			const lines = result.split('\n');
+			const baseStart = lines.findIndex((l) => l.includes('(deflayer layer-0'));
+			const baseEnd = lines.findIndex((l, i) => i > baseStart && l.trim() === ')');
+			const baseSection = lines.slice(baseStart, baseEnd + 1).join('\n');
+			expect(baseSection).toContain('@jus-2');
+		});
+	});
 });

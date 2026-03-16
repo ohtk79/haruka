@@ -6,7 +6,7 @@
 // Called from: stores/editor.svelte.ts
 
 import type { EditorState, KeyAction, Layer, PhysicalKey } from '$lib/models/types';
-import { JIS_TO_US_MAPPINGS, JIS_TO_US_MAP_BY_KEY } from '$lib/models/jis-us-map';
+import { JIS_TO_US_MAPPINGS, JIS_TO_US_MAP_BY_KEY, JIS_TO_US_MAP_BY_KANATA_NAME } from '$lib/models/jis-us-map';
 import { BASE_LAYER_NAME, KANATA_CHORD_PREFIX, MODIFIER_SORT_ORDER } from '$lib/models/constants';
 
 /**
@@ -79,12 +79,15 @@ export function generateKbd(state: EditorState): string {
 			const rowText = row
 				.map((key, i) => {
 					// JIS→US: replace 16 target keys in base layer with @jus-* references
-					// BUT only when the user hasn't customized the action
 					const isBaseLayer = layer.name === BASE_LAYER_NAME;
 					const action = layer.actions.get(key.id);
 					const isDefault = !action || (action.type === 'key' && action.value === key.kanataName);
-					const jisUsMapping = isBaseLayer && state.jisToUsRemap && isDefault
-						? JIS_TO_US_MAP_BY_KEY.get(key.id)
+					const jisUsMapping = isBaseLayer && state.jisToUsRemap
+						? isDefault
+							? JIS_TO_US_MAP_BY_KEY.get(key.id)
+							: (action && action.type === 'key' && (!action.modifiers || action.modifiers.length === 0))
+								? JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value)
+								: undefined
 						: undefined;
 					const text = jisUsMapping
 						? `@${jisUsMapping.aliasName}`
@@ -178,6 +181,17 @@ function calculateColumnWidths(rows: PhysicalKey[][], layers: Layer[], jisToUsRe
 				const jisUsMapping = JIS_TO_US_MAP_BY_KEY.get(key.id);
 				if (jisUsMapping) {
 					maxWidth = Math.max(maxWidth, `@${jisUsMapping.aliasName}`.length);
+				}
+				// リマップ先が変換対象キーの場合も列幅に反映
+				const baseLayer = layers.find((l) => l.name === BASE_LAYER_NAME);
+				if (baseLayer) {
+					const action = baseLayer.actions.get(key.id);
+					if (action && action.type === 'key' && (!action.modifiers || action.modifiers.length === 0)) {
+						const remapMapping = JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value);
+						if (remapMapping) {
+							maxWidth = Math.max(maxWidth, `@${remapMapping.aliasName}`.length);
+						}
+					}
 				}
 			}
 

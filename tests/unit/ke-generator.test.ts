@@ -609,4 +609,139 @@ describe('ke-generator: JIS→US KE rules', () => {
 			{ key_code: 'international1' }
 		]);
 	});
+
+	// =========================================================================
+	// リマップキーへの JIS→US 変換適用テスト (013-fix-jis-us-remap)
+	// =========================================================================
+
+	/** リマップされた JIS→US ルールを description から検索するヘルパー */
+	function findJisUsRemapRule(rules: KeRule[], aliasName: string, sourceKeyName: string): KeRule | undefined {
+		return rules.find((r) => r.description === `haruka: ${BASE_LAYER_NAME} - ${aliasName} (${sourceKeyName})`);
+	}
+
+	// KE-JR-001: A→2 リマップで JIS→US ルールが from.key_code="a" で生成される
+	it('generates JIS→US remap rule with from.key_code="a" when KeyA is remapped to 2', () => {
+		const state = createState({ jisToUsRemap: true });
+		state.layers[0].actions.set('KeyA', { type: 'key', value: '2' });
+		const result = generateKeJson(state);
+
+		// リマップ元 KeyA に対する JIS→US ルールが生成される
+		const remapRule = findJisUsRemapRule(result.json.rules, 'jus-2', 'a');
+		expect(remapRule).toBeDefined();
+		expect(remapRule!.manipulators[0].from.key_code).toBe('a');
+		expect(remapRule!.manipulators[0].from.modifiers).toEqual({ mandatory: ['shift'], optional: ['any'] });
+
+		// 物理キー Digit2 の JIS→US ルールも残っている
+		const physicalRule = findJisUsRule(result.json.rules, 'jus-2');
+		expect(physicalRule).toBeDefined();
+		expect(physicalRule!.manipulators[0].from.key_code).toBe('2');
+	});
+
+	// KE-JR-002: A→B リマップ（非変換対象）で通常のベースレイヤールール生成
+	it('generates normal base layer rule for non-JIS-US remap', () => {
+		const state = createState({ jisToUsRemap: true });
+		state.layers[0].actions.set('KeyA', { type: 'key', value: 'b' });
+		const result = generateKeJson(state);
+
+		// 通常のベースレイヤールールとして生成される（description は物理キー名 'a'）
+		const customRule = findRule(result.json.rules, BASE_LAYER_NAME, 'a');
+		expect(customRule).toBeDefined();
+		expect(customRule!.manipulators[0].from.key_code).toBe('a');
+		expect(customRule!.manipulators[0].to).toEqual([{ key_code: 'b' }]);
+	});
+
+	// KE-JR-003: 物理 2→A リマップで jus-2 ルールが 16→15 に減る
+	it('removes JIS→US rule for physical key when remapped away from target', () => {
+		const state = createState({ jisToUsRemap: true });
+		state.layers[0].actions.set('Digit2', { type: 'key', value: 'a' });
+		const result = generateKeJson(state);
+
+		// Digit2 は もう 2 を出力しないので jus-2 ルールなし
+		const jus2 = findJisUsRule(result.json.rules, 'jus-2');
+		expect(jus2).toBeUndefined();
+
+		// JIS→US ルールは 15 個に減る
+		const jusRules = result.json.rules.filter((r) =>
+			r.description.includes('jus-')
+		);
+		expect(jusRules).toHaveLength(15);
+	});
+
+	// KE-JR-004: A→2, B→6 の複数リマップで両方に JIS→US ルール生成
+	it('generates JIS→US remap rules for multiple remapped keys', () => {
+		const state = createState({ jisToUsRemap: true });
+		state.layers[0].actions.set('KeyA', { type: 'key', value: '2' });
+		state.layers[0].actions.set('KeyB', { type: 'key', value: '6' });
+		const result = generateKeJson(state);
+
+		// A→2 リマップの JIS→US ルール
+		const remapRuleA = findJisUsRemapRule(result.json.rules, 'jus-2', 'a');
+		expect(remapRuleA).toBeDefined();
+
+		// B→6 リマップの JIS→US ルール
+		const remapRuleB = findJisUsRemapRule(result.json.rules, 'jus-6', 'b');
+		expect(remapRuleB).toBeDefined();
+
+		// 物理キーのルールも残っている
+		const physicalRule2 = findJisUsRule(result.json.rules, 'jus-2');
+		expect(physicalRule2).toBeDefined();
+		const physicalRule6 = findJisUsRule(result.json.rules, 'jus-6');
+		expect(physicalRule6).toBeDefined();
+	});
+
+	// KE-JR-005: jisToUsRemap=false で A→2 リマップ → 通常のベースレイヤールール
+	it('generates normal base layer rule when jisToUsRemap is false', () => {
+		const state = createState({ jisToUsRemap: false });
+		state.layers[0].actions.set('KeyA', { type: 'key', value: '2' });
+		const result = generateKeJson(state);
+
+		// JIS→US ルールは一切なし
+		const jusRules = result.json.rules.filter((r) =>
+			r.description.includes('jus-')
+		);
+		expect(jusRules).toHaveLength(0);
+
+		// 通常のルールとして生成（description は物理キー名 'a'）
+		const customRule = findRule(result.json.rules, BASE_LAYER_NAME, 'a');
+		expect(customRule).toBeDefined();
+		expect(customRule!.manipulators[0].to).toEqual([{ key_code: '2' }]);
+	});
+
+	// KE-JR-006: 修飾キー付きリマップ（A → Ctrl+2）で通常ベースレイヤールール
+	it('generates normal base layer rule for remap with modifiers', () => {
+		const state = createState({ jisToUsRemap: true });
+		state.layers[0].actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lctl'] });
+		const result = generateKeJson(state);
+
+		// 修飾キー付きリマップは JIS→US 変換対象外
+		const remapRule = findJisUsRemapRule(result.json.rules, 'jus-2', 'a');
+		expect(remapRule).toBeUndefined();
+
+		// 通常のベースレイヤールールとして from.key_code="a" で出力
+		const customRules = result.json.rules.filter((r) =>
+			r.description === `haruka: ${BASE_LAYER_NAME} - C-2`
+			|| r.manipulators.some((m) => m.from.key_code === 'a')
+		);
+		expect(customRules.length).toBeGreaterThan(0);
+	});
+
+	// KE-JR-007: リマップ JIS→US ルールの順序（物理キー → リマップキー）
+	it('places remap JIS→US rules after physical JIS→US rules', () => {
+		const state = createState({ jisToUsRemap: true });
+		state.layers[0].actions.set('KeyA', { type: 'key', value: '2' });
+		const result = generateKeJson(state);
+
+		// 物理キーの jus-2 ルール
+		const physicalIdx = result.json.rules.findIndex(
+			(r) => r.description === `haruka: ${BASE_LAYER_NAME} - jus-2`
+		);
+		// リマップの jus-2 ルール
+		const remapIdx = result.json.rules.findIndex(
+			(r) => r.description === `haruka: ${BASE_LAYER_NAME} - jus-2 (a)`
+		);
+
+		expect(physicalIdx).toBeGreaterThanOrEqual(0);
+		expect(remapIdx).toBeGreaterThanOrEqual(0);
+		expect(physicalIdx).toBeLessThan(remapIdx);
+	});
 });

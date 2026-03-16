@@ -84,3 +84,11 @@ export const JIS_TO_US_MAPPINGS: readonly JisToUsMapping[] = CONV_ENTRIES.map((e
 export const JIS_TO_US_MAP_BY_KEY = new Map<string, JisToUsMapping>(
 	JIS_TO_US_MAPPINGS.map((m) => [m.physicalKeyId, m])
 );
+
+/**
+ * kanataDefsrcName で高速検索するための Map
+ * リマップ先のキーがJIS→US変換対象かを判定するために使用
+ */
+export const JIS_TO_US_MAP_BY_KANATA_NAME = new Map<string, JisToUsMapping>(
+	JIS_TO_US_MAPPINGS.map((m) => [m.kanataDefsrcName, m])
+);

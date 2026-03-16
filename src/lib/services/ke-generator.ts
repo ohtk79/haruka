@@ -13,7 +13,7 @@ import {
 	isKeUnsupported
 } from '$lib/models/ke-keycode-map';
 import { KE_MODIFIER_MAP, BASE_LAYER_NAME } from '$lib/models/constants';
-import { JIS_TO_US_MAPPINGS } from '$lib/models/jis-us-map';
+import { JIS_TO_US_MAPPINGS, JIS_TO_US_MAP_BY_KANATA_NAME } from '$lib/models/jis-us-map';
 import { getTemplateName } from '$lib/templates/index';
 
 // =============================================================================
@@ -163,6 +163,11 @@ export function generateKeJson(state: EditorState): KeGeneratorResult {
 			// Skip default actions (key with same kanataName, no modifiers)
 			if (isDefaultAction(action, key)) continue;
 
+			// JIS→US変換対象への単純リマップは buildJisUsRules で処理済み
+			if (state.jisToUsRemap && action.type === 'key'
+				&& (!action.modifiers || action.modifiers.length === 0)
+				&& JIS_TO_US_MAP_BY_KANATA_NAME.has(action.value)) continue;
+
 			// Check for unsupported media keys
 			if (key.kanataName && isKeUnsupported(key.kanataName)) {
 				if (!skippedMediaKeys.includes(key.kanataName)) {
@@ -213,6 +218,8 @@ function isDefaultAction(action: KeyAction, key: PhysicalKey): boolean {
  */
 function buildJisUsRules(state: EditorState, baseLayer: Layer): KeRule[] {
 	const rules: KeRule[] = [];
+
+	// Step 1: 物理位置ベースの JIS→US 変換ルール（デフォルトキー）
 	for (const mapping of JIS_TO_US_MAPPINGS) {
 		const key = state.template.keys.find((k) => k.kanataName === mapping.kanataDefsrcName);
 		if (!key) continue;
@@ -243,6 +250,42 @@ function buildJisUsRules(state: EditorState, baseLayer: Layer): KeRule[] {
 			]
 		});
 	}
+
+	// Step 2: リマップキーの JIS→US 変換ルール
+	for (const key of state.template.keys) {
+		const action = baseLayer.actions.get(key.id);
+		if (!action) continue;
+		if (isDefaultAction(action, key)) continue;
+		if (action.type !== 'key') continue;
+		if (action.modifiers && action.modifiers.length > 0) continue;
+
+		const mapping = JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value);
+		if (!mapping) continue;
+
+		const fromKeyCode = getKeKeyCodeFromPhysicalKey(key);
+		if (!fromKeyCode) continue;
+
+		const normalTo = parseKanataExpr(mapping.normalExpr);
+		const shiftTo = parseKanataExpr(mapping.shiftExpr);
+		if (!normalTo || !shiftTo) continue;
+
+		rules.push({
+			description: `haruka: ${BASE_LAYER_NAME} - ${mapping.aliasName} (${key.kanataName ?? key.id})`,
+			manipulators: [
+				{
+					type: 'basic',
+					from: { key_code: fromKeyCode, modifiers: { mandatory: ['shift'], optional: ['any'] } },
+					to: [shiftTo]
+				},
+				{
+					type: 'basic',
+					from: { key_code: fromKeyCode, modifiers: { optional: ['any'] } },
+					to: [normalTo]
+				}
+			]
+		});
+	}
+
 	return rules;
 }
 
