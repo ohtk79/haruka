@@ -39,10 +39,13 @@
 
 	// Key + modifiers state
 	let keyModifiers = $state<string[]>([]);
+	let modifiersDisabled = $derived(currentAction?.type === 'transparent' || currentAction?.type === 'no-op');
 
 	$effect(() => {
 		if (currentAction?.type === 'key') {
 			keyModifiers = currentAction.modifiers ? [...currentAction.modifiers] : [];
+		} else {
+			keyModifiers = [];
 		}
 	});
 
@@ -78,10 +81,12 @@
 		if (!selectedKey) return;
 		// Special keys: Transparent and No-op
 		if (kanataKeyName === '_') {
+			keyModifiers = [];
 			onactionchange(selectedKey.id, { type: 'transparent' });
 			return;
 		}
 		if (kanataKeyName === 'XX') {
+			keyModifiers = [];
 			onactionchange(selectedKey.id, { type: 'no-op' });
 			return;
 		}
@@ -145,10 +150,14 @@
 						<div class="grid grid-cols-2 gap-1">
 							{#each MODIFIER_KEYS as mod}
 								<button
+									data-testid="modifier-{mod.id}"
 									class="rounded border px-2 py-1 text-xs transition-colors"
 									class:bg-blue-500={keyModifiers.includes(mod.id)}
 									class:text-white={keyModifiers.includes(mod.id)}
 									class:border-gray-300={!keyModifiers.includes(mod.id)}
+									class:opacity-50={modifiersDisabled}
+									class:cursor-not-allowed={modifiersDisabled}
+									disabled={modifiersDisabled}
 									onclick={() => toggleKeyModifier(mod.id)}
 								>
 									{getModifierLabel(mod.id)}

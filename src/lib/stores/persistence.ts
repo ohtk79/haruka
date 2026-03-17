@@ -30,10 +30,22 @@ function serializeLayers(layers: Layer[]): SerializedLayer[] {
 	}));
 }
 
+function sanitizeAction(action: KeyAction): KeyAction {
+	// Trans/No-op は modifiers を持たない — 不正データをサイレント補正
+	if (action.type === 'transparent' || action.type === 'no-op') {
+		if ('modifiers' in action) {
+			return { type: action.type };
+		}
+	}
+	return action;
+}
+
 function deserializeLayers(serialized: SerializedLayer[]): Layer[] {
 	return serialized.map((sl) => ({
 		name: sl.name,
-		actions: new Map<string, KeyAction>(Object.entries(sl.actions))
+		actions: new Map<string, KeyAction>(
+			Object.entries(sl.actions).map(([key, action]) => [key, sanitizeAction(action)])
+		)
 	}));
 }
 

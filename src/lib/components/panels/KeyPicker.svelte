@@ -41,12 +41,14 @@
 	 * 2. No templateKanataNames provided → show all (backward compat)
 	 * 3. Key is in the current template → show
 	 * 4. Key is NOT in any template (e.g., media keys, _/XX) → show (generic output)
+	 * 5. US mode ON → show (other template keys visible for reassignment)
 	 */
 	function isKeyAvailable(kanataName: string): boolean {
 		if (usMode && US_MODE_KEY_ALIASES.has(kanataName)) return false;
 		if (!templateKanataNames) return true;
 		if (templateKanataNames.has(kanataName)) return true;
 		if (!ALL_TEMPLATE_KANATA_NAMES.has(kanataName)) return true;
+		if (usMode) return true;
 		return false;
 	}
 
