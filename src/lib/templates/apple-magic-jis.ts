@@ -162,7 +162,7 @@ const keys: PhysicalKey[] = [
 	{ id: 'MetaLeft', label: 'Cmd', kanataName: 'lmet', x: 2, y: 5.5, width: 1.5, height: 1 },
 	{ id: 'Eisu', label: '英数', kanataName: 'eisu', x: 3.5, y: 5.5, width: 1.5, height: 1 },
 	{ id: 'Space', label: 'Space', kanataName: 'spc', x: 5, y: 5.5, width: 3.5, height: 1 },
-	{ id: 'KanaMode', label: 'かな', kanataName: 'kana', x: 8.5, y: 5.5, width: 1.5, height: 1 },
+	{ id: 'Lang1Key', label: 'かな', kanataName: 'kana', x: 8.5, y: 5.5, width: 1.5, height: 1 },
 	{ id: 'MetaRight', label: 'Cmd', kanataName: 'rmet', x: 10, y: 5.5, width: 1.5, height: 1 },
 	{ id: 'AltRight', label: 'Opt', kanataName: 'ralt', x: 11.5, y: 5.5, width: 1, height: 1 },
 	{ id: 'ControlRight', label: 'Ctrl', kanataName: 'rctl', x: 12.5, y: 5.5, width: 1.25, height: 1 },
@@ -180,5 +180,6 @@ export const APPLE_MAGIC_JIS_TEMPLATE: LayoutTemplate = {
 	id: 'apple-jis',
 	name: '112(JIS) Apple専用',
 	keys,
+	supportedFormats: ['json'],
 	keOnly: true,
 };

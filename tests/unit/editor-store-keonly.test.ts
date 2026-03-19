@@ -19,6 +19,7 @@ const KE_ONLY_TEMPLATE: LayoutTemplate = {
 		// Fn キー: kanataName なし
 		{ id: 'Fn', label: 'fn', x: 2, y: 0, width: 1, height: 1 },
 	],
+	supportedFormats: ['json'],
 	keOnly: true,
 };
 
@@ -32,6 +33,13 @@ const NORMAL_TEMPLATE: LayoutTemplate = {
 	],
 };
 
+const AHK_TEMPLATE: LayoutTemplate = {
+	id: 'test-ahk',
+	name: 'Test AHK',
+	keys: NORMAL_TEMPLATE.keys,
+	supportedFormats: ['kbd', 'json', 'ahk']
+};
+
 describe('EditorStore keOnly mode', () => {
 	it('keOnly テンプレートで kbdText が空文字列になる', () => {
 		const store = new EditorStore(KE_ONLY_TEMPLATE);
@@ -42,6 +50,13 @@ describe('EditorStore keOnly mode', () => {
 		const store = new EditorStore(NORMAL_TEMPLATE);
 		expect(store.kbdText).not.toBe('');
 		expect(store.kbdText).toContain('defsrc');
+	});
+
+	it('legacy template では ahk が unavailable のまま', () => {
+		const store = new EditorStore(NORMAL_TEMPLATE);
+		const ahkStatus = store.formatStatuses.find((status) => status.format === 'ahk');
+		expect(ahkStatus?.available).toBe(false);
+		expect(ahkStatus?.staticallySupported).toBe(false);
 	});
 
 	it('keOnly テンプレートでも keJsonText は正常に生成される', () => {
@@ -63,5 +78,19 @@ describe('EditorStore keOnly mode', () => {
 		const layer = store.layers[0];
 		expect(layer.actions.get('KeyA')).toEqual({ type: 'key', value: 'a' });
 		expect(layer.actions.get('KeyB')).toEqual({ type: 'key', value: 'b' });
+	});
+
+	it('keOnly テンプレートでは formatStatuses が json のみ available になる', () => {
+		const store = new EditorStore(KE_ONLY_TEMPLATE);
+		const statusMap = Object.fromEntries(store.formatStatuses.map((status) => [status.format, status]));
+		expect(statusMap.kbd.available).toBe(false);
+		expect(statusMap.json.available).toBe(true);
+		expect(statusMap.ahk.available).toBe(false);
+	});
+
+	it('AHK 対応テンプレートでは ahk status が available になる', () => {
+		const store = new EditorStore(AHK_TEMPLATE);
+		const ahkStatus = store.formatStatuses.find((status) => status.format === 'ahk');
+		expect(ahkStatus?.available).toBe(true);
 	});
 });

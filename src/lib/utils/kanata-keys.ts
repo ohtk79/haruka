@@ -52,6 +52,9 @@ export const US_KEY_LABELS: ReadonlyMap<string, string> = new Map([
 	['ro', 'Ro'],
 	['henk', 'Henkan'],
 	['mhnk', 'Muhenkan'],
-	['kana', 'Kana'],
-	['eisu', 'Eisu'],
+	['eisu', 'LANG2'],
+	['kana', 'LANG1'],
+	['lang1', 'LANG1'],
+	['lang2', 'LANG2'],
+	['jp-kana', 'KANA'],
 ]);

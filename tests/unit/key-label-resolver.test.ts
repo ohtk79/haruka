@@ -95,6 +95,75 @@ describe('getActionLabel', () => {
 		const label = getActionLabel(action, key, true);
 		expect(typeof label).toBe('string');
 	});
+
+	// IME キーのラベル解決テスト（JIS モード = jisToUsRemap: false）
+	describe('IME キーラベル (JIS モード)', () => {
+		it('lang1 → かな', () => {
+			const action: KeyAction = { type: 'key', value: 'lang1' };
+			expect(getActionLabel(action, key, false)).toBe('かな');
+		});
+
+		it('lang2 → 英数', () => {
+			const action: KeyAction = { type: 'key', value: 'lang2' };
+			expect(getActionLabel(action, key, false)).toBe('英数');
+		});
+
+		it('jp-kana → カナ', () => {
+			const action: KeyAction = { type: 'key', value: 'jp-kana' };
+			expect(getActionLabel(action, key, false)).toBe('カナ');
+		});
+
+		it('eisu → 英数', () => {
+			const action: KeyAction = { type: 'key', value: 'eisu' };
+			expect(getActionLabel(action, key, false)).toBe('英数');
+		});
+
+		it('kana → かな', () => {
+			const action: KeyAction = { type: 'key', value: 'kana' };
+			expect(getActionLabel(action, key, false)).toBe('かな');
+		});
+	});
+
+	// IME キーのラベル解決テスト（US モード = jisToUsRemap: true）
+	describe('IME キーラベル (US モード)', () => {
+		it('lang1 → LANG1', () => {
+			const action: KeyAction = { type: 'key', value: 'lang1' };
+			expect(getActionLabel(action, key, true)).toBe('LANG1');
+		});
+
+		it('lang2 → LANG2', () => {
+			const action: KeyAction = { type: 'key', value: 'lang2' };
+			expect(getActionLabel(action, key, true)).toBe('LANG2');
+		});
+
+		it('jp-kana → KANA', () => {
+			const action: KeyAction = { type: 'key', value: 'jp-kana' };
+			expect(getActionLabel(action, key, true)).toBe('KANA');
+		});
+
+		it('eisu → LANG2', () => {
+			const action: KeyAction = { type: 'key', value: 'eisu' };
+			expect(getActionLabel(action, key, true)).toBe('LANG2');
+		});
+
+		it('kana → LANG1', () => {
+			const action: KeyAction = { type: 'key', value: 'kana' };
+			expect(getActionLabel(action, key, true)).toBe('LANG1');
+		});
+	});
+
+	// IME キー + Modifier の組み合わせ
+	describe('IME キー + Modifier', () => {
+		it('lctl + lang1 (JIS) → *C-かな', () => {
+			const action: KeyAction = { type: 'key', value: 'lang1', modifiers: ['lctl'] };
+			expect(getActionLabel(action, key, false)).toBe('*C-かな');
+		});
+
+		it('lctl + lang1 (US) → *C-LANG1', () => {
+			const action: KeyAction = { type: 'key', value: 'lang1', modifiers: ['lctl'] };
+			expect(getActionLabel(action, key, true)).toBe('*C-LANG1');
+		});
+	});
 });
 
 describe('getActionClass', () => {

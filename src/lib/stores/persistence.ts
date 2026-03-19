@@ -6,15 +6,17 @@
 // Called from: routes/+page.svelte
 // Serialize/deserialize EditorState with Map↔Object conversion
 
-import { STORAGE_KEY, STORAGE_DEBOUNCE_MS, TAP_HOLD_DEFAULT_TIMEOUT } from '$lib/models/constants';
+import { STORAGE_KEY, STORAGE_DEBOUNCE_MS, TAP_HOLD_DEFAULT_TIMEOUT, LEGACY_ACTION_MIGRATION } from '$lib/models/constants';
 import * as m from '$lib/paraglide/messages';
 import type {
 	EditorState,
+	HoldAction,
 	KeyAction,
 	Layer,
 	SerializedEditorState,
 	SerializedLayer,
 	LayoutTemplate,
+	TapAction,
 	VersionedStorage
 } from '$lib/models/types';
 import { parseAndMigrate, CURRENT_VERSION } from '$lib/services/migration';
@@ -35,6 +37,25 @@ function sanitizeAction(action: KeyAction): KeyAction {
 	if (action.type === 'transparent' || action.type === 'no-op') {
 		if ('modifiers' in action) {
 			return { type: action.type };
+		}
+	}
+	// レガシー action ID の正規化
+	return normalizeActionId(action);
+}
+
+/** 旧 action ID → 新 action ID に正規化する。元オブジェクトは変更しない。 */
+function normalizeActionId(action: KeyAction): KeyAction {
+	if (action.type === 'key') {
+		const migrated = LEGACY_ACTION_MIGRATION[action.value];
+		if (migrated) {
+			return { ...action, value: migrated };
+		}
+	}
+	if (action.type === 'tap-hold') {
+		const tapAction = normalizeActionId(action.tapAction) as TapAction;
+		const holdAction = normalizeActionId(action.holdAction) as HoldAction;
+		if (tapAction !== action.tapAction || holdAction !== action.holdAction) {
+			return { ...action, tapAction, holdAction };
 		}
 	}
 	return action;

@@ -1,6 +1,6 @@
 <!--
   ActionPanel — Key action editor panel (Key/Tap-Hold mode selection, modifiers, KeyPicker)
-  Props: selectedKey, currentAction, layers, onactionchange, usMode, templateKanataNames
+  Props: selectedKey, currentAction, layers, onactionchange, usMode, templateKanataNames, isAppleTemplate
   Used by: routes/+page.svelte
 -->
 <script lang="ts">
@@ -17,9 +17,10 @@
 		onactionchange: (keyId: string, action: KeyAction) => void;
 		usMode?: boolean;
 		templateKanataNames?: ReadonlySet<string>;
+		isAppleTemplate?: boolean;
 	}
 
-	let { selectedKey, currentAction, layers, onactionchange, usMode = false, templateKanataNames }: Props = $props();
+	let { selectedKey, currentAction, layers, onactionchange, usMode = false, templateKanataNames, isAppleTemplate = false }: Props = $props();
 
 	let actionType = $state<string>(ACTION_TYPES.KEY);
 
@@ -176,13 +177,15 @@
 						onkeypick={handleKeyPick}
 						{usMode}
 						{templateKanataNames}
-					/>
+					{isAppleTemplate}
+				/>
 				{:else if actionType === ACTION_TYPES.TAP_HOLD}
 					<TapHoldForm
 						action={currentAction?.type === 'tap-hold' ? currentAction : undefined}
 						{layers}
 						{usMode}
 						{templateKanataNames}
+						{isAppleTemplate}
 						ontaphold={(act) => {
 							if (selectedKey) onactionchange(selectedKey.id, act);
 						}}

@@ -1,6 +1,6 @@
 # haruka
 
-**haruka** is a web-based keyboard configurator for [kanata](https://github.com/jtroo/kanata) and [Karabiner-Elements](https://karabiner-elements.pqrs.org/). Create configuration files visually in your browser — no install required.
+**haruka** is a web-based keyboard configurator for [kanata](https://github.com/jtroo/kanata), [Karabiner-Elements](https://karabiner-elements.pqrs.org/), and AutoHotkey v2. Create configuration files visually in your browser — no install required.
 
 **Try it now:** **[https://ohtk79.github.io/haruka/](https://ohtk79.github.io/haruka/)**
 
@@ -9,26 +9,26 @@
 ## Features
 
 - Visual keyboard UI for editing key mappings
-- Export to kanata (.kbd) / Karabiner-Elements (.json) / both
+- Export to kanata (.kbd) / Karabiner-Elements (.json) / AutoHotkey v2 (.ahk)
 - Up to 8 layers with rename & reorder support
 - Tap-Hold actions (different behavior for tap vs. hold)
 - Layer-while-held / Layer-switch layer control
 - Transparent / No-op action assignment
 - Per-key modifier output (Ctrl, Shift, Alt, Meta — left/right independent)
 - JIS → US remap (output US layout from JIS template)
-- Global Tapping Term setting (applied to both kanata & Karabiner-Elements)
+- Global Tapping Term setting
 - Share configurations via URL (compressed encoding)
 - Auto-save to localStorage
 - Japanese / English UI switcher
 
 ## Supported Keyboard Layouts
 
-| Template | kanata (.kbd) | Karabiner-Elements (.json) |
-|---|:---:|:---:|
-| 109 (JIS) | ✓ | ✓ |
-| 104 (ANSI) | ✓ | ✓ |
-| 112 (JIS) Apple | — | ✓ |
-| 109 (US) Apple | — | ✓ |
+| Template | kanata (.kbd) | Karabiner-Elements (.json) | AutoHotkey v2 (.ahk) |
+|---|:---:|:---:|:---:|
+| 109 (JIS) | ✓ | ✓ | ✓ |
+| 104 (ANSI) | ✓ | ✓ | ✓ |
+| 112 (JIS) Apple | — | ✓ | — |
+| 109 (US) Apple | — | ✓ | — |
 
 Apple templates include the Fn key and are Karabiner-Elements only.
 
@@ -52,7 +52,7 @@ Tap-Hold variants: `tap-hold` / `tap-hold-press` / `tap-hold-release`
 3. Click a key on the keyboard to select it
 4. Configure action type, output key, and modifiers in the action panel
 5. Add and switch layers using the layer tabs
-6. Export `.kbd` / `.json` / both from the header
+6. Export `.kbd` / `.json` / `.ahk` individually from the header
 
 ### Sharing
 
@@ -60,12 +60,13 @@ Click the share button in the header to encode your current configuration as a U
 
 ### Preview
 
-The preview panel at the bottom shows the generated kanata (.kbd) and Karabiner-Elements (.json) output in real time.
+Preview opens in a new window and shows the generated kanata (.kbd), Karabiner-Elements (.json), and AutoHotkey v2 (.ahk) output.
 
 ## Compatibility
 
 - kanata: v1.11.0 (output validated via `kanata --check` in CI)
 - Karabiner-Elements: current version
+- AutoHotkey: v2.0+
 
 ---
 

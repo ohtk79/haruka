@@ -1,6 +1,6 @@
 <!--
   TapHoldForm — Tap-Hold action configuration (variant, tap key, hold modifier/layer)
-  Props: action, layers, ontaphold, usMode, templateKanataNames
+  Props: action, layers, ontaphold, usMode, templateKanataNames, isAppleTemplate
   Used by: components/panels/ActionPanel.svelte
 -->
 <script lang="ts">
@@ -20,9 +20,10 @@
 		ontaphold: (action: KeyAction & { type: 'tap-hold' }) => void;
 		usMode?: boolean;
 		templateKanataNames?: ReadonlySet<string>;
+		isAppleTemplate?: boolean;
 	}
 
-	let { action, layers, ontaphold, usMode = false, templateKanataNames }: Props = $props();
+	let { action, layers, ontaphold, usMode = false, templateKanataNames, isAppleTemplate = false }: Props = $props();
 
 	let variant = $state<'tap-hold' | 'tap-hold-press' | 'tap-hold-release'>('tap-hold');
 
@@ -97,6 +98,7 @@
 				currentValue={tapKeyValue}
 				{usMode}
 				{templateKanataNames}
+				{isAppleTemplate}
 				excludeCategories={['modifiers']}
 				onkeypick={(v) => {
 					tapKeyValue = v;

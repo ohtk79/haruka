@@ -5,6 +5,19 @@
 // Tested by: N/A (type-only module)
 // Called from: stores/, services/, components/, templates/
 
+import type { ExportFormatId } from './export-format';
+
+/** .kbd 出力のターゲット OS */
+export type KbdTargetOs = 'windows' | 'macos' | 'linux';
+
+/** .kbd export の OS ターゲット別ステータス */
+export interface KbdTargetExportStatus {
+	target: KbdTargetOs;
+	available: boolean;
+	disabledReason: string | null;
+	notice: string | null;
+}
+
 /**
  * キーボード上の 1 つの物理キーの位置・形状・識別情報
  */
@@ -39,6 +52,8 @@ export interface LayoutTemplate {
 	keys: PhysicalKey[];
 	/** true ならネイティブ US 配列テンプレート（ラベル表示で US 側を使用） */
 	usLayout?: boolean;
+	/** canonical な静的対応形式 */
+	supportedFormats?: ExportFormatId[];
 	/** true なら KE 専用テンプレート（kanata .kbd 生成を抑止） */
 	keOnly?: boolean;
 }

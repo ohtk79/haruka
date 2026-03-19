@@ -1,35 +1,50 @@
 <!--
   Header — App header bar with template selection and file operations
-  Props: ondownload, onexport, onnewfile, onpreview, onshare, keOnly, persistenceError, shareAvailable
+  Props: onexport, onnewfile, onpreview, onshare, formatStatuses, persistenceError, shareAvailable
   Used by: routes/+page.svelte
 -->
 <script lang="ts">
 	import { TEMPLATES } from '$lib/templates';
 	import ShareDialog from './ShareDialog.svelte';
 	import LanguageSwitcher from './LanguageSwitcher.svelte';
+	import type { ExportFormatId, ExportFormatStatus } from '$lib/models/export-format';
+	import type { KbdTargetOs, KbdTargetExportStatus } from '$lib/models/types';
 	import * as m from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime.js';
 	import { getTemplateName } from '$lib/templates/index';
 
 	let {
-		ondownload,
 		onexport,
 		onnewfile,
 		onpreview,
 		onshare,
-		keOnly = false,
+		formatStatuses,
+		kbdTargetStatuses,
 		persistenceError = null,
 		shareAvailable = true
 	}: {
-		ondownload: () => void;
-		onexport: (format: 'kbd' | 'json' | 'both') => void;
+		onexport: (format: ExportFormatId, kbdTarget?: KbdTargetOs) => void;
 		onnewfile: (templateId: string) => void;
 		onpreview: () => void;
 		onshare: () => Promise<string>;
-		keOnly?: boolean;
+		formatStatuses: ExportFormatStatus[];
+		kbdTargetStatuses: KbdTargetExportStatus[];
 		persistenceError: string | null;
 		shareAvailable?: boolean;
 	} = $props();
+
+	/** .kbd 以外のエクスポート項目 */
+	const nonKbdExportItems: { format: ExportFormatId; label: string }[] = [
+		{ format: 'json', label: m.header_exportJson() },
+		{ format: 'ahk', label: m.header_exportAhk() }
+	];
+
+	/** OS ごとの .kbd ラベル */
+	const kbdTargetLabels: Record<KbdTargetOs, string> = {
+		windows: m.header_exportKbdWindows(),
+		macos: m.header_exportKbdMacos(),
+		linux: m.header_exportKbdLinux(),
+	};
 
 	let showExportMenu = $state(false);
 	let showNewMenu = $state(false);
@@ -63,6 +78,25 @@
 		} finally {
 			shareLoading = false;
 		}
+	}
+
+	function getFormatStatus(format: ExportFormatId): ExportFormatStatus {
+		return (
+			formatStatuses.find((status) => status.format === format) ?? {
+				format,
+				available: false,
+				staticallySupported: false,
+				issues: [],
+				notices: [],
+				disabledReason: null
+			}
+		);
+	}
+
+	function getNoticeSummary(status: ExportFormatStatus): string | null {
+		if (status.notices.length === 0) return null;
+		if (status.notices.length === 1) return status.notices[0].message;
+		return `${status.notices[0].message} (+${status.notices.length - 1})`;
 	}
 </script>
 
@@ -139,46 +173,49 @@
 			</button>
 			{#if showExportMenu}
 				<div
-					class="absolute right-0 z-50 mt-1 w-56 rounded-md bg-white shadow-lg ring-1 ring-black/5"
+					class="absolute right-0 z-50 mt-1 w-72 rounded-md bg-white shadow-lg ring-1 ring-black/5"
 					role="menu"
 				>
-					<button
-						class="block w-full px-4 py-2 text-left text-sm {keOnly ? 'cursor-not-allowed text-gray-300' : 'text-gray-700 hover:bg-gray-100'}"
-						role="menuitem"
-						disabled={keOnly}
-						title={keOnly ? m.header_appleKarabinerOnly() : undefined}
-						data-testid="menu-export-kbd"
-						onclick={() => {
-							showExportMenu = false;
-							onexport('kbd');
-						}}
-					>
-						{m.header_exportKbd()}
-					</button>
-					<button
-						class="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
-						role="menuitem"
-						data-testid="menu-export-json"
-						onclick={() => {
-							showExportMenu = false;
-							onexport('json');
-						}}
-					>
-						{m.header_exportJson()}
-					</button>
-					<button
-						class="block w-full px-4 py-2 text-left text-sm {keOnly ? 'cursor-not-allowed text-gray-300' : 'text-gray-700 hover:bg-gray-100'}"
-						role="menuitem"
-						disabled={keOnly}
-						title={keOnly ? m.header_appleKarabinerOnly() : undefined}
-						data-testid="menu-export-both"
-						onclick={() => {
-							showExportMenu = false;
-							onexport('both');
-						}}
-					>
-						{m.header_exportBoth()}
-					</button>
+					{#each kbdTargetStatuses as kbdStatus}
+						<button
+							class="block w-full px-4 py-3 text-left text-sm {kbdStatus.available ? 'text-gray-700 hover:bg-gray-100' : 'cursor-not-allowed text-gray-300'}"
+							role="menuitem"
+							disabled={!kbdStatus.available}
+							title={kbdStatus.disabledReason ?? undefined}
+							data-testid="menu-export-kbd-{kbdStatus.target}"
+							onclick={() => {
+								if (!kbdStatus.available) return;
+								showExportMenu = false;
+								onexport('kbd', kbdStatus.target);
+							}}
+						>
+							<span>{kbdTargetLabels[kbdStatus.target]}</span>
+							{#if kbdStatus.notice}
+								<span class="mt-1 block text-xs text-amber-600">{kbdStatus.notice}</span>
+							{/if}
+						</button>
+					{/each}
+					{#each nonKbdExportItems as item}
+						{@const status = getFormatStatus(item.format)}
+						{@const noticeSummary = getNoticeSummary(status)}
+						<button
+							class="block w-full px-4 py-3 text-left text-sm {status.available ? 'text-gray-700 hover:bg-gray-100' : 'cursor-not-allowed text-gray-300'}"
+							role="menuitem"
+							disabled={!status.available}
+							title={status.disabledReason ?? undefined}
+							data-testid="menu-export-{item.format}"
+							onclick={() => {
+								if (!status.available) return;
+								showExportMenu = false;
+								onexport(item.format);
+							}}
+						>
+							<span>{item.label}</span>
+							{#if noticeSummary}
+								<span class="mt-1 block text-xs text-amber-600">{noticeSummary}</span>
+							{/if}
+						</button>
+					{/each}
 				</div>
 			{/if}
 		</div>

@@ -16,7 +16,7 @@
 	import NewFileConfirmDialog from '$lib/components/common/NewFileConfirmDialog.svelte';
 	import Header from '$lib/components/common/Header.svelte';
 	import { checkLayerReferences } from '$lib/services/validation';
-	import { handleDownload, handleExport } from '$lib/services/file-export';
+	import { handleExport } from '$lib/services/file-export';
 	import { openPreviewPopup, updatePopupContent, closePreviewPopup } from '$lib/services/preview-popup.svelte';
 	import { loadState, debouncedSave, clearState, getSavedTemplateId, PersistenceError } from '$lib/stores/persistence';
 	import { debugLog } from '$lib/services/debug-logger.svelte';
@@ -162,7 +162,7 @@
 
 	// Sync content to popup window reactively
 	$effect(() => {
-		updatePopupContent(store.kbdText, store.keJsonText);
+		updatePopupContent(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdNotice);
 	});
 
 	// Cleanup popup on destroy
@@ -245,7 +245,13 @@
 	}
 </script>
 
-<Header ondownload={() => handleDownload(store.kbdText)} onexport={(f) => handleExport(f, store.kbdText, store.keJsonText)} onnewfile={handleNewFile} onpreview={() => openPreviewPopup(store.kbdText, store.keJsonText, store.template.keOnly ?? false)} onshare={handleShare} keOnly={store.template.keOnly ?? false} {persistenceError} {shareAvailable} />
+<Header onexport={(f, kbdTarget) => {
+	if (f === 'kbd' && kbdTarget) {
+		handleExport(f, store.generateKbdForTarget(kbdTarget), store.keJsonText, store.ahkText);
+	} else {
+		handleExport(f, store.kbdText, store.keJsonText, store.ahkText);
+	}
+}} onnewfile={handleNewFile} onpreview={() => openPreviewPopup(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdTarget, (t) => store.setKbdTarget(t), store.kbdNotice)} onshare={handleShare} formatStatuses={store.formatStatuses} kbdTargetStatuses={store.kbdTargetStatuses} {persistenceError} {shareAvailable} />
 
 <main class="mx-auto max-w-screen-2xl p-4">
 
@@ -306,6 +312,7 @@
 				onactionchange={handleActionChange}
 				usMode={useUsLabels}
 				templateKanataNames={templateKanataNames}
+				isAppleTemplate={store.template.keOnly === true}
 			/>
 		</div>
 	</div>

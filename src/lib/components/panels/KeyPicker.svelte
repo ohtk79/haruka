@@ -1,12 +1,20 @@
 <!--
   KeyPicker — Category-tabbed kanata key selection grid with search
-  Props: currentValue, onkeypick, usMode, excludeCategories, templateKanataNames
+  Props: currentValue, onkeypick, usMode, excludeCategories, templateKanataNames, isAppleTemplate
   Used by: components/panels/ActionPanel.svelte, components/panels/TapHoldForm.svelte
 -->
 <script lang="ts">
 	import { KANATA_KEY_CATEGORIES, US_KEY_LABELS } from '$lib/utils/kanata-keys';
 	import { ALL_TEMPLATE_KANATA_NAMES } from '$lib/templates';
 	import * as m from '$lib/paraglide/messages';
+
+	/**
+	 * Apple テンプレートと非Apple テンプレートで排他的に表示する IME キーグループ。
+	 * Apple: eisu/kana（物理キー）を使用、lang1/lang2/jp-kana を非表示。
+	 * 非Apple: lang1/lang2/jp-kana を使用、eisu/kana を非表示。
+	 */
+	const APPLE_IME_KEYS: ReadonlySet<string> = new Set(['eisu', 'kana']);
+	const STANDARD_IME_KEYS: ReadonlySet<string> = new Set(['lang1', 'lang2', 'jp-kana']);
 
 	interface Props {
 		currentValue?: string;
@@ -15,9 +23,11 @@
 		excludeCategories?: string[];
 		/** When provided, hides template-specific keys not in this set */
 		templateKanataNames?: ReadonlySet<string>;
+		/** true なら Apple テンプレート（eisu/kana 表示、lang1/lang2/jp-kana 非表示） */
+		isAppleTemplate?: boolean;
 	}
 
-	let { currentValue, onkeypick, usMode = false, excludeCategories = [], templateKanataNames }: Props = $props();
+	let { currentValue, onkeypick, usMode = false, excludeCategories = [], templateKanataNames, isAppleTemplate = false }: Props = $props();
 
 	/**
 	 * JIS-specific keys that duplicate another key's label in US mode.
@@ -38,13 +48,17 @@
 	 * Should a key be visible given the current template?
 	 * A key is shown if:
 	 * 1. In US mode, JIS-duplicate keys (e.g. ¥) are always hidden
-	 * 2. No templateKanataNames provided → show all (backward compat)
-	 * 3. Key is in the current template → show
-	 * 4. Key is NOT in any template (e.g., media keys, _/XX) → show (generic output)
-	 * 5. US mode ON → show (other template keys visible for reassignment)
+	 * 2. IME key mutual exclusion: Apple templates hide lang1/lang2/jp-kana, non-Apple hide eisu/kana
+	 * 3. No templateKanataNames provided → show all (backward compat)
+	 * 4. Key is in the current template → show
+	 * 5. Key is NOT in any template (e.g., media keys, _/XX) → show (generic output)
+	 * 6. US mode ON → show (other template keys visible for reassignment)
 	 */
 	function isKeyAvailable(kanataName: string): boolean {
 		if (usMode && US_MODE_KEY_ALIASES.has(kanataName)) return false;
+		// IME キーの排他制御: Apple テンプレートでは standard IME キーを非表示、逆も同様
+		if (isAppleTemplate && STANDARD_IME_KEYS.has(kanataName)) return false;
+		if (!isAppleTemplate && APPLE_IME_KEYS.has(kanataName)) return false;
 		if (!templateKanataNames) return true;
 		if (templateKanataNames.has(kanataName)) return true;
 		if (!ALL_TEMPLATE_KANATA_NAMES.has(kanataName)) return true;
@@ -85,6 +99,17 @@
 			if (usLabel) return usLabel;
 		}
 		return jisLabel;
+	}
+
+	/** LANG1/LANG2/KANA 用の詳細ツールチップ */
+	const KEY_TOOLTIPS: ReadonlyMap<string, () => string> = new Map([
+		['lang1', () => m.tooltip_lang1()],
+		['lang2', () => m.tooltip_lang2()],
+		['jp-kana', () => m.tooltip_jp_kana()],
+	]);
+
+	function getKeyTooltip(name: string): string {
+		return KEY_TOOLTIPS.get(name)?.() ?? name;
 	}
 
 	let availableCategories = $derived(
@@ -159,7 +184,7 @@
 						class:border-gray-200={effectiveValue !== key.name}
 						class:hover:bg-gray-50={effectiveValue !== key.name}
 						onclick={() => onkeypick(key.name)}
-						title={key.name}
+						title={getKeyTooltip(key.name)}
 					>
 						{getKeyLabel(key.name, key.label)}
 					</button>

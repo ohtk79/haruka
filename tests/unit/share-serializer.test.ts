@@ -314,6 +314,22 @@ describe('serializeForShare', () => {
 		const result2 = serializeForShare(state);
 		expect(result2.tt).toBeUndefined();
 	});
+
+	it('derived export state は共有データに含まれない', () => {
+		const state = createDefaultState() as EditorState & {
+			ahkResult?: unknown;
+			ahkText?: string;
+			formatStatuses?: unknown[];
+		};
+		state.ahkResult = { text: '#Requires AutoHotkey v2.0' };
+		state.ahkText = '#Requires AutoHotkey v2.0';
+		state.formatStatuses = [{ format: 'ahk', available: true }];
+
+		const result = serializeForShare(state);
+		expect(result).not.toHaveProperty('ahkResult');
+		expect(result).not.toHaveProperty('ahkText');
+		expect(result).not.toHaveProperty('formatStatuses');
+	});
 });
 
 // =============================================================================

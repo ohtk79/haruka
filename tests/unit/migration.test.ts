@@ -48,6 +48,14 @@ describe('migration', () => {
 			expect(needsMigration(null)).toBe(false);
 			expect(needsMigration(undefined)).toBe(false);
 		});
+
+		it('migration 後データに derived export state を追加しない', () => {
+			const current: VersionedStorage = { version: CURRENT_VERSION, data: createV1State() };
+			const result = parseAndMigrate(JSON.stringify(current));
+			expect('ahkResult' in result.data).toBe(false);
+			expect('ahkText' in result.data).toBe(false);
+			expect('formatStatuses' in result.data).toBe(false);
+		});
 	});
 
 	describe('migrateV1ToV2: output-chord → key+modifiers', () => {

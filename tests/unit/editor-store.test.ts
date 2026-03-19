@@ -16,6 +16,12 @@ const MINI_TEMPLATE = {
 	]
 } satisfies LayoutTemplate;
 
+const MINI_AHK_TEMPLATE = {
+	...MINI_TEMPLATE,
+	id: 'test-mini-ahk',
+	supportedFormats: ['kbd', 'json', 'ahk']
+} satisfies LayoutTemplate;
+
 describe('EditorStore', () => {
 	let store: EditorStore;
 
@@ -346,6 +352,25 @@ describe('EditorStore', () => {
 			newStore.restoreState({ jisToUsRemap: true });
 			expect(newStore.jisToUsRemap).toBe(true);
 		});
+
+		it('restoreState に template が含まれる場合はテンプレートも切り替える', () => {
+			const importedStore = new EditorStore(ANSI_104_TEMPLATE);
+			const importedState = importedStore.getState();
+
+			const newStore = new EditorStore(JIS_109_TEMPLATE);
+			newStore.restoreState(importedState);
+
+			expect(newStore.template.id).toBe('ansi-104');
+			expect(newStore.layers[0]?.actions.has('Escape')).toBe(true);
+		});
+
+		it('getState は derived export state を含めない', () => {
+			const ahkStore = new EditorStore(MINI_AHK_TEMPLATE);
+			const state = ahkStore.getState();
+			expect('ahkResult' in state).toBe(false);
+			expect('ahkText' in state).toBe(false);
+			expect('formatStatuses' in state).toBe(false);
+		});
 	});
 
 	describe('$derived properties', () => {
@@ -367,6 +392,22 @@ describe('EditorStore', () => {
 		it('keJsonText is valid JSON string', () => {
 			const parsed = JSON.parse(store.keJsonText);
 			expect(parsed).toBeDefined();
+		});
+
+		it('ahkResult / ahkText が AHK 対応テンプレートで生成される', () => {
+			const ahkStore = new EditorStore(MINI_AHK_TEMPLATE);
+			expect(ahkStore.ahkResult.issues).toHaveLength(0);
+			expect(ahkStore.ahkText).toContain('#Requires AutoHotkey v2.0');
+		});
+
+		it('formatStatuses が AHK 対応テンプレートで 3 形式を available にする', () => {
+			const ahkStore = new EditorStore(MINI_AHK_TEMPLATE);
+			const statusMap = Object.fromEntries(
+				ahkStore.formatStatuses.map((status) => [status.format, status])
+			);
+			expect(statusMap.kbd.available).toBe(true);
+			expect(statusMap.json.available).toBe(true);
+			expect(statusMap.ahk.available).toBe(true);
 		});
 	});
 

@@ -37,7 +37,16 @@
 	let isIsoEnter = $derived(key.shape === 'iso-enter');
 
 	// Font size unified across all keys, capped at 1u equivalent
-	let fontSize = $derived(Math.min(key.width, key.height, 1) * 0.28);
+	let baseFontSize = $derived(Math.min(key.width, key.height, 1) * 0.28);
+	// 複数行ラベルで1行あたりの視覚幅が大きい場合、フォントサイズを縮小
+	let fontSize = $derived.by(() => {
+		if (!isMultiLineLabel) return baseFontSize;
+		// 全角文字を幅2、半角文字を幅1として見積もり
+		const maxVisualWidth = Math.max(...labelLines.map(l =>
+			[...l].reduce((w, c) => w + (c.charCodeAt(0) > 0x7F ? 2 : 1), 0)
+		));
+		return maxVisualWidth <= 4 ? baseFontSize : baseFontSize * (5 / maxVisualWidth);
+	});
 </script>
 
 <!-- Svelte 5 compiler does not recognize keyboard event handlers on SVG <g> elements (role="button" + tabindex="0" are set correctly) -->

@@ -183,8 +183,8 @@ const keys: PhysicalKey[] = [
 	{ id: 'Convert', label: '変換', kanataName: 'henk', x: 8.5, y: 5.5, width: 1, height: 1 },
 	{
 		id: 'KanaMode',
-		label: 'かな',
-		kanataName: 'kana',
+		label: 'カタカナ\nひらがな',
+		kanataName: 'jp-kana',
 		x: 9.5,
 		y: 5.5,
 		width: 1,
@@ -238,5 +238,6 @@ const keys: PhysicalKey[] = [
 export const JIS_109_TEMPLATE: LayoutTemplate = {
 	id: 'jis-109',
 	name: '109(JIS)',
-	keys
+	keys,
+	supportedFormats: ['kbd', 'json', 'ahk']
 };

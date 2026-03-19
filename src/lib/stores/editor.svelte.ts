@@ -3,6 +3,7 @@
 // =============================================================================
 // Depends on: models/constants.ts, models/types.ts, models/jis-us-map.ts,
 //             services/kbd-generator.ts, services/ke-generator.ts,
+//             services/ahk-generator.ts, services/export-format-support.ts,
 //             services/validation.ts, services/debug-logger.svelte.ts
 // Tested by: tests/unit/editor-store.test.ts
 // Called from: components/common/DebugPanel.svelte, routes/+page.svelte
@@ -11,16 +12,26 @@ import { BASE_LAYER_NAME, TAP_HOLD_DEFAULT_TIMEOUT, MAX_LAYERS } from '$lib/mode
 import type {
 	EditorState,
 	KeyAction,
+	KbdTargetOs,
+	KbdTargetExportStatus,
 	Layer,
 	LayoutTemplate,
 	PhysicalKey
 } from '$lib/models/types';
 import { isTopLevelAction } from '$lib/models/types';
+import type { AhkGeneratorResult, ExportFormatStatus } from '$lib/models/export-format';
 import { generateKbd } from '$lib/services/kbd-generator';
 import { generateKeJson, type KeGeneratorResult } from '$lib/services/ke-generator';
+import { generateAhk } from '$lib/services/ahk-generator';
+import {
+	isFormatStaticallySupported,
+	resolveExportFormatStatuses,
+	validateKbdExport
+} from '$lib/services/export-format-support';
 import { validateLayerCount, validateLayerName } from '$lib/services/validation';
 import { debugLog } from '$lib/services/debug-logger.svelte';
 import { JIS_TO_US_MAPPINGS } from '$lib/models/jis-us-map';
+import * as m from '$lib/paraglide/messages';
 
 /**
  * Create a default base layer for a given template
@@ -60,19 +71,64 @@ export class EditorStore {
 	activeLayerIndex: number = $state(0);
 	jisToUsRemap: boolean = $state(false);
 	tappingTerm: number = $state(TAP_HOLD_DEFAULT_TIMEOUT);
+	kbdTarget: KbdTargetOs = $state('windows');
 
 	// Derived
 	readonly activeLayer: Layer = $derived(this.layers[this.activeLayerIndex]);
 	readonly kbdText: string = $derived.by(() => {
-		if (this.template.keOnly) return '';
-		const { template, layers, jisToUsRemap, tappingTerm } = this;
-		return generateKbd({ template, layers, jisToUsRemap, tappingTerm, selectedKeyId: null, activeLayerIndex: 0 });
+		if (!isFormatStaticallySupported(this.template, 'kbd')) return '';
+		const { template, layers, jisToUsRemap, tappingTerm, kbdTarget } = this;
+		return generateKbd({ template, layers, jisToUsRemap, tappingTerm, selectedKeyId: null, activeLayerIndex: 0 }, kbdTarget);
 	});
 	readonly keResult: KeGeneratorResult = $derived.by(() => {
 		const { template, layers, jisToUsRemap, tappingTerm } = this;
 		return generateKeJson({ template, layers, jisToUsRemap, tappingTerm, selectedKeyId: null, activeLayerIndex: 0 });
 	});
 	readonly keJsonText: string = $derived(JSON.stringify(this.keResult.json, null, 2));
+	readonly ahkResult: AhkGeneratorResult = $derived.by(() => {
+		const { template, layers, jisToUsRemap, tappingTerm } = this;
+		return generateAhk({ template, layers, jisToUsRemap, tappingTerm, selectedKeyId: null, activeLayerIndex: 0 });
+	});
+	readonly ahkText: string = $derived(this.ahkResult.text);
+	readonly kbdValidation = $derived.by(() => {
+		if (!isFormatStaticallySupported(this.template, 'kbd')) return { valid: true, unsupportedActions: [] };
+		return validateKbdExport(
+			{ template: this.template, layers: this.layers, jisToUsRemap: this.jisToUsRemap, tappingTerm: this.tappingTerm, selectedKeyId: null, activeLayerIndex: 0 },
+			this.kbdTarget
+		);
+	});
+	readonly formatStatuses: ExportFormatStatus[] = $derived.by(() =>
+		resolveExportFormatStatuses({
+			template: this.template,
+			kbdText: this.kbdText,
+			keJsonText: this.keJsonText,
+			ahkResult: this.ahkResult
+		})
+	);
+	readonly kbdTargetStatuses: KbdTargetExportStatus[] = $derived.by(() => {
+		const targets: KbdTargetOs[] = ['windows', 'macos', 'linux'];
+		const supported = isFormatStaticallySupported(this.template, 'kbd');
+		if (!supported) {
+			const reason = this.template.keOnly
+				? m.header_appleKarabinerOnly()
+				: m.export_templateFormatUnsupported({ format: m.header_exportKbd() });
+			return targets.map(target => ({ target, available: false, disabledReason: reason, notice: null }));
+		}
+		const state: EditorState = { template: this.template, layers: this.layers, jisToUsRemap: this.jisToUsRemap, tappingTerm: this.tappingTerm, selectedKeyId: null, activeLayerIndex: 0 };
+		const hasKanaKey = this.template.keys.some(k => k.kanataName === 'jp-kana');
+		return targets.map(target => {
+			const validation = validateKbdExport(state, target);
+			if (!validation.valid) {
+				const first = validation.unsupportedActions[0];
+				return { target, available: false, disabledReason: `${first.actionId}: ${first.reason}`, notice: null };
+			}
+			const notice = (target === 'windows' && hasKanaKey) ? m.export_kbdWinterceptNotice() : null;
+			return { target, available: true, disabledReason: null, notice };
+		});
+	});
+	readonly kbdNotice: string | null = $derived(
+		this.kbdTargetStatuses.find(s => s.target === this.kbdTarget)?.notice ?? null
+	);
 
 	constructor(template: LayoutTemplate, layers?: Layer[]) {
 		this.template = template;
@@ -86,6 +142,23 @@ export class EditorStore {
 	selectKey(keyId: string | null): void {
 		this.selectedKeyId = keyId;
 		debugLog.logSelectKey(keyId);
+	}
+
+	// =========================================================================
+	// KBD Target OS
+	// =========================================================================
+
+	setKbdTarget(target: KbdTargetOs): void {
+		this.kbdTarget = target;
+	}
+
+	/** 指定ターゲット OS 用の .kbd テキストを生成する（エクスポート時に使用） */
+	generateKbdForTarget(target: KbdTargetOs): string {
+		if (!isFormatStaticallySupported(this.template, 'kbd')) return '';
+		return generateKbd(
+			{ template: this.template, layers: this.layers, jisToUsRemap: this.jisToUsRemap, tappingTerm: this.tappingTerm, selectedKeyId: null, activeLayerIndex: 0 },
+			target
+		);
 	}
 
 	// =========================================================================
@@ -302,6 +375,12 @@ export class EditorStore {
 	 * Restore state from deserialized data
 	 */
 	restoreState(state: Partial<EditorState>): void {
+		if (state.template) {
+			this.template = state.template;
+			if (!state.layers) {
+				this.layers = [createBaseLayer(state.template)];
+			}
+		}
 		if (state.layers) {
 			this.layers = state.layers;
 		}

@@ -162,5 +162,6 @@ export const ANSI_104_TEMPLATE: LayoutTemplate = {
 	id: 'ansi-104',
 	name: '104(ANSI)',
 	keys,
+	supportedFormats: ['kbd', 'json', 'ahk'],
 	usLayout: true
 };

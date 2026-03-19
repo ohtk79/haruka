@@ -165,3 +165,23 @@ export const KE_UNSUPPORTED_KEYS = [
 	'AudioVolumeMute',
 	'MediaStop'
 ] as const;
+
+// =============================================================================
+// レガシー action ID マイグレーション
+// =============================================================================
+
+/** 旧 action ID → 新 action ID のマイグレーションマップ (eisu/kana は削除済み: v6 で正式な kanata キー名に昇格) */
+export const LEGACY_ACTION_MIGRATION: Readonly<Record<string, string>> = {
+};
+
+// =============================================================================
+// AutoHotkey v2 診断コード
+// =============================================================================
+
+/** AHK の blocking / notice 用コード */
+export const AHK_DIAGNOSTIC_CODES = {
+	TEMPLATE_UNSUPPORTED: 'AHK_TEMPLATE_UNSUPPORTED',
+	KEY_NOT_MAPPED: 'AHK_KEY_NOT_MAPPED',
+	ACTION_NOT_SUPPORTED: 'AHK_ACTION_NOT_SUPPORTED',
+	VARIANT_NORMALIZED: 'AHK_VARIANT_NORMALIZED'
+} as const;

@@ -43,5 +43,11 @@ export const VALID_KANATA_KEY_NAMES: ReadonlySet<string> = new Set([
 	'kp0', 'kp.',
 
 	// JIS 固有キー
-	'\\', '¥', 'ro', 'henk', 'mhnk', 'kana',
+	'\\', '¥', 'ro', 'henk', 'mhnk', 'jp-kana',
+
+	// Apple JIS 固有キー
+	'eisu', 'kana',
+
+	// 仮想キー (IME ON/OFF)
+	'lang1', 'lang2',
 ]);

@@ -435,4 +435,149 @@ describe('kbd-generator with JIS→US remap', () => {
 			expect(baseSection).toContain('@jus-2');
 		});
 	});
+
+	// =========================================================================
+	// tap-hold 内 JIS→US 変換テスト
+	// =========================================================================
+
+	describe('JIS→US remap with tap-hold actions', () => {
+		function createStateWithNavLayer(jisToUsRemap: boolean): EditorState {
+			const state = createState(jisToUsRemap);
+			const layer2Actions = new Map<string, KeyAction>();
+			for (const key of JIS_109_TEMPLATE.keys) {
+				layer2Actions.set(key.id, { type: 'transparent' });
+			}
+			state.layers.push({ name: 'nav', actions: layer2Actions });
+			return state;
+		}
+
+		// KBD-JR-TH-001: 非JISキー(A)に tap-hold(tap=2) で @jus-2 が使用される
+		it('should use @jus-2 in tap-hold alias when tap is 2', () => {
+			const state = createStateWithNavLayer(true);
+			state.layers[0].actions.set('KeyA', {
+				type: 'tap-hold',
+				tapAction: { type: 'key', value: '2' },
+				holdAction: { type: 'layer-while-held', layer: 'nav' },
+				variant: 'tap-hold-press',
+				tapTimeout: 200,
+				holdTimeout: 200
+			});
+			const result = generateKbd(state, 'windows');
+
+			const aliasLine = result.split('\n').find((l) => l.includes('a_layer-0'));
+			expect(aliasLine).toBeDefined();
+			expect(aliasLine).toContain('@jus-2');
+		});
+
+		// KBD-JR-TH-002: 物理JISキー(Digit2)に tap-hold(tap=2) で @jus-2 が使用される
+		it('should use @jus-2 in tap-hold alias for physical Digit2', () => {
+			const state = createStateWithNavLayer(true);
+			state.layers[0].actions.set('Digit2', {
+				type: 'tap-hold',
+				tapAction: { type: 'key', value: '2' },
+				holdAction: { type: 'layer-while-held', layer: 'nav' },
+				variant: 'tap-hold-press',
+				tapTimeout: 200,
+				holdTimeout: 200
+			});
+			const result = generateKbd(state, 'windows');
+
+			const aliasLine = result.split('\n').find((l) => l.includes('2_layer-0'));
+			expect(aliasLine).toBeDefined();
+			expect(aliasLine).toContain('@jus-2');
+		});
+
+		// KBD-JR-TH-003: tap が非変換対象キー(f)の場合、JIS→US 変換なし
+		it('should not use @jus-* when tap is non-JIS-US key', () => {
+			const state = createStateWithNavLayer(true);
+			state.layers[0].actions.set('KeyA', {
+				type: 'tap-hold',
+				tapAction: { type: 'key', value: 'f' },
+				holdAction: { type: 'layer-while-held', layer: 'nav' },
+				variant: 'tap-hold-press',
+				tapTimeout: 200,
+				holdTimeout: 200
+			});
+			const result = generateKbd(state, 'windows');
+
+			const aliasLine = result.split('\n').find((l) => l.includes('a_layer-0'));
+			expect(aliasLine).toBeDefined();
+			expect(aliasLine).not.toContain('@jus-');
+			expect(aliasLine).toContain(' f ');
+		});
+
+		// KBD-JR-TH-004: jisToUsRemap=false で tap-hold(tap=2) → 素の 2
+		it('should not use @jus-* when jisToUsRemap is false', () => {
+			const state = createStateWithNavLayer(false);
+			state.layers[0].actions.set('KeyA', {
+				type: 'tap-hold',
+				tapAction: { type: 'key', value: '2' },
+				holdAction: { type: 'layer-while-held', layer: 'nav' },
+				variant: 'tap-hold-press',
+				tapTimeout: 200,
+				holdTimeout: 200
+			});
+			const result = generateKbd(state, 'windows');
+
+			const aliasLine = result.split('\n').find((l) => l.includes('a_layer-0'));
+			expect(aliasLine).toBeDefined();
+			expect(aliasLine).not.toContain('@jus-');
+		});
+
+		// KBD-JR-TH-005: 非ベースレイヤーの tap-hold では JIS→US 変換なし
+		it('should not use @jus-* for tap-hold on non-base layer', () => {
+			const state = createStateWithNavLayer(true);
+			// nav レイヤーに tap-hold を設定
+			state.layers[1].actions.set('KeyA', {
+				type: 'tap-hold',
+				tapAction: { type: 'key', value: '2' },
+				holdAction: { type: 'layer-while-held', layer: 'nav' },
+				variant: 'tap-hold-press',
+				tapTimeout: 200,
+				holdTimeout: 200
+			});
+			const result = generateKbd(state, 'windows');
+
+			const aliasLine = result.split('\n').find((l) => l.includes('a_nav'));
+			expect(aliasLine).toBeDefined();
+			expect(aliasLine).not.toContain('@jus-');
+		});
+
+		// KBD-JR-TH-006: tap に修飾キーが付いている場合、JIS→US 変換なし
+		it('should not use @jus-* when tap has modifiers', () => {
+			const state = createStateWithNavLayer(true);
+			state.layers[0].actions.set('KeyA', {
+				type: 'tap-hold',
+				tapAction: { type: 'key', value: '2', modifiers: ['lctl'] },
+				holdAction: { type: 'layer-while-held', layer: 'nav' },
+				variant: 'tap-hold-press',
+				tapTimeout: 200,
+				holdTimeout: 200
+			});
+			const result = generateKbd(state, 'windows');
+
+			const aliasLine = result.split('\n').find((l) => l.includes('a_layer-0'));
+			expect(aliasLine).toBeDefined();
+			expect(aliasLine).not.toContain('@jus-2');
+		});
+
+		// KBD-JR-TH-007: 全16キーが tap-hold でも正しく変換される
+		it('should handle all 16 JIS-US keys in tap-hold', () => {
+			const state = createStateWithNavLayer(true);
+			// grv キーに tap-hold(tap=grv) を設定
+			state.layers[0].actions.set('Backquote', {
+				type: 'tap-hold',
+				tapAction: { type: 'key', value: 'grv' },
+				holdAction: { type: 'layer-while-held', layer: 'nav' },
+				variant: 'tap-hold-press',
+				tapTimeout: 200,
+				holdTimeout: 200
+			});
+			const result = generateKbd(state, 'windows');
+
+			const aliasLine = result.split('\n').find((l) => l.includes('grv_layer-0'));
+			expect(aliasLine).toBeDefined();
+			expect(aliasLine).toContain('@jus-grv');
+		});
+	});
 });

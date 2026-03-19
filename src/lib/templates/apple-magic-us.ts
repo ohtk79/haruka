@@ -169,6 +169,7 @@ export const APPLE_MAGIC_US_TEMPLATE: LayoutTemplate = {
 	id: 'apple-us',
 	name: '109(US) Apple専用',
 	keys,
+	supportedFormats: ['json'],
 	keOnly: true,
 	usLayout: true,
 };

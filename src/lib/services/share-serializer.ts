@@ -31,7 +31,8 @@ import type {
 import {
 	SHARE_FORMAT_VERSION,
 	TAPPING_TERM_DEFAULT,
-	BASE_LAYER_NAME
+	BASE_LAYER_NAME,
+	LEGACY_ACTION_MIGRATION
 } from '$lib/models/constants';
 import { getTemplateById, getTemplateName, TEMPLATES } from '$lib/templates';
 
@@ -96,7 +97,8 @@ export function toShareAction(action: KeyAction): ShareAction {
 export function fromShareAction(shareAction: ShareAction): KeyAction {
 	switch (shareAction.t) {
 		case 'k': {
-			const result: KeyActionKey = { type: 'key', value: shareAction.v };
+			const migratedValue = LEGACY_ACTION_MIGRATION[shareAction.v] ?? shareAction.v;
+			const result: KeyActionKey = { type: 'key', value: migratedValue };
 			if (shareAction.m && shareAction.m.length > 0) {
 				result.modifiers = [...shareAction.m];
 			}

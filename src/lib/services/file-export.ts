@@ -5,7 +5,9 @@
 // Tested by: N/A (browser API, covered by E2E: tests/e2e/export.spec.ts)
 // Called from: routes/+page.svelte
 
-export type ExportFormat = 'kbd' | 'json' | 'both';
+import type { ExportFormatId } from '$lib/models/export-format';
+
+export type ExportFormat = ExportFormatId;
 
 /**
  * Export .kbd (kanata) file
@@ -28,16 +30,13 @@ export async function exportKeJson(content: string, filename: string = 'haruka.j
 }
 
 /**
- * Export both .kbd and .json files
+ * Export .ahk (AutoHotkey v2) file
  */
-export async function exportBoth(
-	kbdContent: string,
-	jsonContent: string,
-	kbdFilename: string = 'keymap.kbd',
-	jsonFilename: string = 'haruka.json'
-): Promise<void> {
-	await exportKbd(kbdContent, kbdFilename);
-	await exportKeJson(jsonContent, jsonFilename);
+export async function exportAhk(content: string, filename: string = 'haruka.ahk'): Promise<void> {
+	await exportFileWithType(content, filename, {
+		description: 'AutoHotkey v2 Script',
+		accept: { 'text/plain': ['.ahk'] }
+	});
 }
 
 /**
@@ -88,7 +87,8 @@ async function exportFileWithType(
 export async function handleExport(
 	format: ExportFormat,
 	kbdText: string,
-	keJsonText: string
+	keJsonText: string,
+	ahkText: string = ''
 ): Promise<void> {
 	switch (format) {
 		case 'kbd':
@@ -97,8 +97,8 @@ export async function handleExport(
 		case 'json':
 			await exportKeJson(keJsonText, 'haruka.json');
 			break;
-		case 'both':
-			await exportBoth(kbdText, keJsonText, 'kanata.kbd', 'haruka.json');
+		case 'ahk':
+			await exportAhk(ahkText, 'haruka.ahk');
 			break;
 	}
 }

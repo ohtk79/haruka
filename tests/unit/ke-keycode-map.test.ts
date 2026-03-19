@@ -19,8 +19,8 @@ describe('ke-keycode-map', () => {
 			}
 		});
 
-		it('should have exactly 128 entries (109 template + 1 eisu + 1 fn + 7 media + 2 JIS int + 7 F13-F19 + 1 NumpadEqual)', () => {
-			expect(Object.keys(KANATA_TO_KE_MAP)).toHaveLength(128);
+		it('should have exactly 131 entries (109 template + 1 eisu + 1 fn + 7 media + 2 JIS int + 7 F13-F19 + 1 NumpadEqual + 3 lang1/lang2/jp-kana)', () => {
+			expect(Object.keys(KANATA_TO_KE_MAP)).toHaveLength(131);
 		});
 	});
 

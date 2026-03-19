@@ -1,5 +1,5 @@
 // =============================================================================
-// Data Migration Service — v1 → v2 → v3 → v4
+// Data Migration Service — v1 → v2 → v3 → v4 → v5 → v6
 // =============================================================================
 // Depends on: models/types.ts, models/constants.ts
 // Tested by: tests/unit/migration.test.ts
@@ -8,9 +8,11 @@
 // v1 → v2: output-chord → key + modifiers (C/S/A/M), layer wrap
 // v2 → v3: modifier IDs C/S/A/M → lctl/lsft/lalt/lmet (left/right distinction)
 // v3 → v4: base layer rename 'base' → 'layer-0'
+// v4 → v5: action ID 正規化 kana→lang1, eisu→lang2
+// v5 → v6: keyId/action 正規化 (Apple JIS KanaMode→Lang1Key, JIS 109 lang1→jp-kana)
 
 import type { KeyAction, SerializedEditorState, SerializedLayer, VersionedStorage, TapAction, HoldAction } from '$lib/models/types';
-import { TAP_HOLD_DEFAULT_TIMEOUT } from '$lib/models/constants';
+import { TAP_HOLD_DEFAULT_TIMEOUT, LEGACY_ACTION_MIGRATION } from '$lib/models/constants';
 
 /** Legacy action type from v1 (not in current KeyAction union) */
 interface LegacyOutputChord {
@@ -23,7 +25,7 @@ interface LegacyOutputChord {
 type MigratableAction = KeyAction | LegacyOutputChord;
 
 /** Current schema version */
-export const CURRENT_VERSION = 4;
+export const CURRENT_VERSION = 6;
 
 /** Migration function type */
 type MigrationFn = (data: SerializedEditorState) => SerializedEditorState;
@@ -33,6 +35,8 @@ export const MIGRATIONS: ReadonlyMap<number, MigrationFn> = new Map<number, Migr
 	[1, migrateV1ToV2],
 	[2, migrateV2ToV3],
 	[3, migrateV3ToV4],
+	[4, migrateV4ToV5],
+	[5, migrateV5ToV6],
 ]);
 
 /**
@@ -241,6 +245,102 @@ function migrateActionV4(action: KeyAction): KeyAction {
 			...action,
 			tapAction: migrateActionV4(action.tapAction) as TapAction,
 			holdAction: migrateActionV4(action.holdAction) as HoldAction
+		};
+	}
+	return action;
+}
+
+// =============================================================================
+// v4 → v5 Migration: action ID 正規化 kana→lang1, eisu→lang2
+// =============================================================================
+
+/**
+ * Migrate v4 data to v5 format
+ * - Normalize legacy action IDs: kana→lang1, eisu→lang2
+ * - Idempotent: already-v5 data passes through unchanged
+ */
+export function migrateV4ToV5(data: SerializedEditorState): SerializedEditorState {
+	return {
+		...data,
+		layers: data.layers.map(migrateLayerV5)
+	};
+}
+
+function migrateLayerV5(layer: SerializedLayer): SerializedLayer {
+	const newActions: Record<string, KeyAction> = {};
+	for (const [keyId, action] of Object.entries(layer.actions)) {
+		newActions[keyId] = migrateActionV5(action);
+	}
+	return { name: layer.name, actions: newActions };
+}
+
+function migrateActionV5(action: KeyAction): KeyAction {
+	if (action.type === 'key') {
+		const migrated = LEGACY_ACTION_MIGRATION[action.value];
+		if (migrated) {
+			return { ...action, value: migrated };
+		}
+	}
+	if (action.type === 'tap-hold') {
+		return {
+			...action,
+			tapAction: migrateActionV5(action.tapAction) as TapAction,
+			holdAction: migrateActionV5(action.holdAction) as HoldAction
+		};
+	}
+	return action;
+}
+
+// =============================================================================
+// v5 → v6 Migration: keyId/action 正規化 (Apple JIS KanaMode→Lang1Key, JIS 109 kana→jp-kana)
+// =============================================================================
+
+/** v5→v6 で逆変換が必要なアクション値（v4→v5 で誤って変換されたもの） */
+const V6_ACTION_REVERT: Readonly<Record<string, Record<string, string>>> = {
+	'apple-jis': { lang1: 'kana', lang2: 'eisu' },
+	'jis-109': { lang1: 'jp-kana' },
+};
+
+/** v5→v6 で keyId をリネームするマップ (テンプレート単位) */
+const V6_KEY_RENAME: Readonly<Record<string, Record<string, string>>> = {
+	'apple-jis': { KanaMode: 'Lang1Key' },
+};
+
+export function migrateV5ToV6(data: SerializedEditorState): SerializedEditorState {
+	const revertMap = V6_ACTION_REVERT[data.templateId];
+	const renameMap = V6_KEY_RENAME[data.templateId];
+	if (!revertMap && !renameMap) return data;
+	return {
+		...data,
+		layers: data.layers.map(layer => migrateLayerV6(layer, revertMap, renameMap))
+	};
+}
+
+function migrateLayerV6(
+	layer: SerializedLayer,
+	revertMap: Record<string, string> | undefined,
+	renameMap: Record<string, string> | undefined
+): SerializedLayer {
+	const newActions: Record<string, KeyAction> = {};
+	for (const [keyId, action] of Object.entries(layer.actions)) {
+		const newKeyId = renameMap?.[keyId] ?? keyId;
+		newActions[newKeyId] = revertMap ? migrateActionV6(action, revertMap) : action;
+	}
+	return { name: layer.name, actions: newActions };
+}
+
+function migrateActionV6(action: KeyAction, revertMap: Record<string, string>): KeyAction {
+	if (action.type === 'key') {
+		const reverted = revertMap[action.value];
+		if (reverted) {
+			return { ...action, value: reverted };
+		}
+	}
+	if (action.type === 'tap-hold') {
+		return {
+			...action,
+			tapAction: migrateActionV6(action.tapAction, revertMap) as TapAction,
+			holdAction: migrateActionV6(action.holdAction, revertMap) as HoldAction
 		};
 	}
 	return action;

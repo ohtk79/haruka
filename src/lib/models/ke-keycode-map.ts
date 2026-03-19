@@ -93,6 +93,10 @@ export const KANATA_TO_KE_MAP: Readonly<Record<string, KeKeyMapping>> = {
 	mhnk: { fromKeyCode: 'japanese_pc_nfer', toKeyCode: 'japanese_eisuu' },
 	kana: { fromKeyCode: 'japanese_kana' },
 	eisu: { fromKeyCode: 'japanese_eisuu' },
+	// 新 action ID: lang1/lang2/jp-kana
+	lang1: { fromKeyCode: 'japanese_kana' },
+	lang2: { fromKeyCode: 'japanese_eisuu' },
+	'jp-kana': { fromKeyCode: 'japanese_pc_katakana' },
 	fn: { fromKeyCode: 'fn' },
 
 	// =========================================================================
