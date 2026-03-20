@@ -581,4 +581,39 @@ describe('EditorStore', () => {
 			expect(newStore.layers[0].actions.get('KeyA')).toEqual(store.layers[0].actions.get('KeyA'));
 		});
 	});
+
+	// =========================================================================
+	// T025: selectedKeyId 変更で生成テキストが再計算されないことの検証
+	// =========================================================================
+	describe('derived stability on selectedKeyId change', () => {
+		it('kbdText does not change when selectedKeyId changes', () => {
+			const jisStore = new EditorStore(JIS_109_TEMPLATE);
+			const textBefore = jisStore.kbdText;
+			jisStore.selectKey('KeyA');
+			expect(jisStore.kbdText).toBe(textBefore);
+			jisStore.selectKey(null);
+			expect(jisStore.kbdText).toBe(textBefore);
+		});
+
+		it('keJsonText does not change when selectedKeyId changes', () => {
+			const jisStore = new EditorStore(JIS_109_TEMPLATE);
+			const textBefore = jisStore.keJsonText;
+			jisStore.selectKey('KeyB');
+			expect(jisStore.keJsonText).toBe(textBefore);
+		});
+
+		it('ahkText does not change when selectedKeyId changes', () => {
+			const ahkStore = new EditorStore(MINI_AHK_TEMPLATE);
+			const textBefore = ahkStore.ahkText;
+			ahkStore.selectKey('KeyA');
+			expect(ahkStore.ahkText).toBe(textBefore);
+		});
+
+		it('kbdValidation does not change when selectedKeyId changes', () => {
+			const jisStore = new EditorStore(JIS_109_TEMPLATE);
+			const validBefore = jisStore.kbdValidation.valid;
+			jisStore.selectKey('KeyC');
+			expect(jisStore.kbdValidation.valid).toBe(validBefore);
+		});
+	});
 });

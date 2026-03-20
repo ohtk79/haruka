@@ -71,3 +71,46 @@ describe('JIS_TO_US_MAP_BY_KEY', () => {
 		expect(mapping!.aliasName).toBe('jus-2');
 	});
 });
+
+// =============================================================================
+// KE オーバーライドフィールド検証 (019-fix-ke-intl-key)
+// =============================================================================
+
+describe('KE override fields (keNormalExpr / keShiftExpr)', () => {
+	it('jus-bsl has keNormalExpr="\u00A5" and no keShiftExpr', () => {
+		const mapping = JIS_TO_US_MAPPINGS.find((m) => m.aliasName === 'jus-bsl');
+		expect(mapping).toBeDefined();
+		expect(mapping!.keNormalExpr).toBe('\u00A5');
+		expect(mapping!.keShiftExpr).toBeUndefined();
+	});
+
+	it('jus-yen has keNormalExpr="\u00A5" and no keShiftExpr', () => {
+		const mapping = JIS_TO_US_MAPPINGS.find((m) => m.aliasName === 'jus-yen');
+		expect(mapping).toBeDefined();
+		expect(mapping!.keNormalExpr).toBe('\u00A5');
+		expect(mapping!.keShiftExpr).toBeUndefined();
+	});
+
+	it('jus-ro has keNormalExpr="\u00A5" and no keShiftExpr', () => {
+		const mapping = JIS_TO_US_MAPPINGS.find((m) => m.aliasName === 'jus-ro');
+		expect(mapping).toBeDefined();
+		expect(mapping!.keNormalExpr).toBe('\u00A5');
+		expect(mapping!.keShiftExpr).toBeUndefined();
+	});
+
+	it('jus-min has keShiftExpr="ro" and no keNormalExpr', () => {
+		const mapping = JIS_TO_US_MAPPINGS.find((m) => m.aliasName === 'jus-min');
+		expect(mapping).toBeDefined();
+		expect(mapping!.keShiftExpr).toBe('ro');
+		expect(mapping!.keNormalExpr).toBeUndefined();
+	});
+
+	it('non-affected 12 keys have neither keNormalExpr nor keShiftExpr', () => {
+		const affectedAliases = new Set(['jus-bsl', 'jus-yen', 'jus-ro', 'jus-min']);
+		for (const mapping of JIS_TO_US_MAPPINGS) {
+			if (affectedAliases.has(mapping.aliasName)) continue;
+			expect(mapping.keNormalExpr).toBeUndefined();
+			expect(mapping.keShiftExpr).toBeUndefined();
+		}
+	});
+});

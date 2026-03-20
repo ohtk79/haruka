@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getActionLabel, getActionClass, resolveKeyLabel } from '$lib/utils/key-label-resolver';
 import type { KeyAction, PhysicalKey } from '$lib/models/types';
-import type { ShiftLabelEntry } from '$lib/models/shift-labels';
+import type { ShiftLabelEntry } from '$lib/models/key-metadata';
 
 // Helper: minimal PhysicalKey stub
 function makeKey(overrides: Partial<PhysicalKey> = {}): PhysicalKey {

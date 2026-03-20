@@ -1,87 +1,64 @@
-<!--
-  +page.svelte — Main application page: keyboard configurator
-  Orchestrates: EditorStore, keyboard SVG, action panel, layer tabs, settings, file I/O
-  Tested by: tests/e2e/ (action-type, export, jis-us-remap, template-selection)
--->
+<!-- +page.svelte — Orchestrates EditorStore, keyboard SVG, action panel, layer tabs, file I/O -->
 <script lang="ts">
 	import { setContext, onMount, onDestroy } from 'svelte';
 	import { EDITOR_STORE_CONTEXT_KEY } from '$lib/models/constants';
 	import { EditorStore } from '$lib/stores/editor.svelte';
-	import { DEFAULT_TEMPLATE, getTemplateById } from '$lib/templates';
+	import { DEFAULT_TEMPLATE, getTemplateById, getTemplateName } from '$lib/templates';
 	import KeyboardSvg from '$lib/components/keyboard/KeyboardSvg.svelte';
 	import ActionPanel from '$lib/components/panels/ActionPanel.svelte';
 	import LayerTabs from '$lib/components/layers/LayerTabs.svelte';
 	import GlobalSettingsPanel from '$lib/components/panels/GlobalSettingsPanel.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import NewFileConfirmDialog from '$lib/components/common/NewFileConfirmDialog.svelte';
+	import ImportConfirmDialog from '$lib/components/common/ImportConfirmDialog.svelte';
 	import Header from '$lib/components/common/Header.svelte';
+	import DebugPanel from '$lib/components/common/DebugPanel.svelte';
 	import { checkLayerReferences } from '$lib/services/validation';
 	import { handleExport } from '$lib/services/file-export';
 	import { openPreviewPopup, updatePopupContent, closePreviewPopup } from '$lib/services/preview-popup.svelte';
 	import { loadState, debouncedSave, clearState, getSavedTemplateId, PersistenceError } from '$lib/stores/persistence';
 	import { debugLog } from '$lib/services/debug-logger.svelte';
-	import DebugPanel from '$lib/components/common/DebugPanel.svelte';
-	import type { KeyAction, LayoutTemplate } from '$lib/models/types';
-	import type { ImportSummary } from '$lib/models/share-types';
-	import { serializeForShare, deserializeFromShare, createImportSummary } from '$lib/services/share-serializer';
-	import { encodeShareData, generateShareUrl, decodeShareData, extractEncodedFromHash } from '$lib/services/share-url';
 	import { isCompressionStreamAvailable } from '$lib/utils/compression';
-	import { ShareError } from '$lib/services/share-validator';
-	import ImportConfirmDialog from '$lib/components/common/ImportConfirmDialog.svelte';
+	import { DialogState } from '$lib/stores/dialog-state.svelte';
+	import { checkUrlHash, generateShareUrlFromState, getShareErrorMessage } from '$lib/services/share-url-handler';
+	import type { KeyAction, KbdTargetOs } from '$lib/models/types';
+	import type { ExportFormat } from '$lib/services/file-export';
 	import * as m from '$lib/paraglide/messages';
-	import { getTemplateName } from '$lib/templates/index';
 
-	// Resolve initial template from localStorage or default
 	const savedTemplateId = getSavedTemplateId();
-	const initialTemplate = savedTemplateId
-		? getTemplateById(savedTemplateId) ?? DEFAULT_TEMPLATE
-		: DEFAULT_TEMPLATE;
-
-	// Initialize store with resolved template
+	const initialTemplate = savedTemplateId ? getTemplateById(savedTemplateId) ?? DEFAULT_TEMPLATE : DEFAULT_TEMPLATE;
 	const store = new EditorStore(initialTemplate);
 	setContext(EDITOR_STORE_CONTEXT_KEY, store);
-
-	// Derived: use US labels when template is natively US or user toggled JIS→US
-	let useUsLabels = $derived(store.jisToUsRemap || store.template.usLayout === true);
-
-	// Derived: set of kanataNames in current template (for KeyPicker filtering)
-	let templateKanataNames = $derived(new Set(store.template.keys.map((k) => k.kanataName).filter((name): name is string => name !== undefined)));
-
-	// Persistence error display
+	const dialog = new DialogState();
+	const shareAvailable = isCompressionStreamAvailable();
 	let persistenceError = $state<string | null>(null);
+	let kbdHighlightMode = $state<'selected' | 'changed' | null>(null);
+	let settingsTabActive = $state(false);
+	let pendingImportState: Partial<import('$lib/models/types').EditorState> | null = null;
 
-	// Restore saved state on mount
-	onMount(() => {
+	onMount(async () => {
 		const saved = loadState(initialTemplate);
 		debugLog.logRestoreState(!!saved);
-		if (saved) {
-			store.restoreState(saved);
-		}
+		if (saved) store.restoreState(saved);
 		debugLog.log('App mounted', `layers=${store.layers.length}, template=${store.template.id}`);
-
-		// URL ハッシュから共有データを検出
-		checkUrlHash();
-	});
-
-	// Auto-save on state change
-	$effect(() => {
-		// Access reactive properties to create dependency tracking
-		const state = store.getState();
 		try {
-			debouncedSave(state);
-			persistenceError = null;
-		} catch (err) {
-			if (err instanceof PersistenceError) {
-				persistenceError = err.message;
+			const result = await checkUrlHash(getTemplateName(store.template.id));
+			if (result) {
+				pendingImportState = result.state;
+				dialog.openImportDialog(result.summary);
 			}
+		} catch (err) {
+			dialog.setShareError(getShareErrorMessage(err));
 		}
 	});
-	// Confirm dialog state
-	let confirmOpen = $state(false);
-	let confirmTitle = $state('');
-	let confirmDesc = $state('');
-	let confirmLabel = $state('OK');
-	let confirmAction = $state<(() => void) | null>(null);
+
+	$effect(() => {
+		const state = store.getState();
+		try { debouncedSave(state); persistenceError = null; }
+		catch (err) { if (err instanceof PersistenceError) persistenceError = err.message; }
+	});
+	$effect(() => { updatePopupContent(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdNotice); });
+	onDestroy(() => closePreviewPopup());
 
 	function handleKeySelect(keyId: string) {
 		const isDeselecting = store.selectedKeyId === keyId;
@@ -91,258 +68,133 @@
 
 	function handleActionChange(keyId: string, action: KeyAction) {
 		store.setAction(keyId, action);
-		if (keyId === store.selectedKeyId) {
-			kbdHighlightMode = 'changed';
-		}
-	}
-
-	function handleLayerSwitch(index: number) {
-		settingsTabActive = false;
-		store.switchLayer(index);
-	}
-
-	function handleLayerAdd() {
-		const name = `layer-${store.layers.length}`;
-		const error = store.addLayer(name);
-		if (error) {
-			alert(error);
-		}
+		if (keyId === store.selectedKeyId) kbdHighlightMode = 'changed';
 	}
 
 	function handleLayerDelete(index: number) {
 		const layerName = store.layers[index]?.name;
 		if (!layerName) return;
-
-		// Check for broken references
 		const brokenRefs = checkLayerReferences(store.layers, layerName);
 		if (brokenRefs.length > 0) {
-			confirmTitle = m.dialog_deleteLayer_title();
-			confirmDesc = m.dialog_deleteLayer_message({ layerName, refCount: String(brokenRefs.length) });
-			confirmLabel = m.button_delete();
-			confirmAction = () => {
-				store.deleteLayer(index);
-				confirmOpen = false;
-			};
-			confirmOpen = true;
+			dialog.openConfirmDialog(
+				m.dialog_deleteLayer_title(),
+				m.dialog_deleteLayer_message({ layerName, refCount: String(brokenRefs.length) }),
+				m.button_delete(),
+				() => { store.deleteLayer(index); dialog.closeConfirmDialog(); }
+			);
 		} else {
 			store.deleteLayer(index);
 		}
 	}
 
-	function handleLayerRename(index: number, name: string) {
-		const error = store.renameLayer(index, name);
-		if (error) {
-			alert(error);
+	function handleExportAction(format: ExportFormat, kbdTarget?: KbdTargetOs) {
+		if (format === 'kbd' && kbdTarget) {
+			handleExport(format, store.generateKbdForTarget(kbdTarget), store.keJsonText, store.ahkText);
+		} else {
+			handleExport(format, store.kbdText, store.keJsonText, store.ahkText);
 		}
 	}
 
-	function handleLayerReorder(fromIndex: number, toIndex: number) {
-		store.reorderLayer(fromIndex, toIndex);
+	function handlePreview() {
+		openPreviewPopup(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdTarget, (t) => store.setKbdTarget(t), store.kbdNotice);
 	}
-
-	let selectedKey = $derived(
-		store.selectedKeyId
-			? store.template.keys.find((k) => k.id === store.selectedKeyId) ?? null
-			: null
-	);
-
-	let currentAction = $derived(
-		store.selectedKeyId ? store.activeLayer?.actions.get(store.selectedKeyId) : undefined
-	);
-
-	// .kbd highlight mode: blue for selected, red for changed
-	let kbdHighlightMode = $state<'selected' | 'changed' | null>(null);
-	// Settings tab state
-	let settingsTabActive = $state(false);
-
-	function handleSettingsSwitch() {
-		settingsTabActive = true;
-		store.selectKey(null);
-	}
-
-	// Sync content to popup window reactively
-	$effect(() => {
-		updatePopupContent(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdNotice);
-	});
-
-	// Cleanup popup on destroy
-	onDestroy(() => closePreviewPopup());
 
 	function handleNewFile(templateId: string) {
-		const template = getTemplateById(templateId);
-		if (!template) return;
-
-		newFileTemplate = template;
-		newFileConfirmOpen = true;
+		const tmpl = getTemplateById(templateId);
+		if (tmpl) dialog.openNewFileDialog(tmpl);
 	}
-	// New file confirm dialog state
-	let newFileConfirmOpen = $state(false);
-	let newFileTemplate = $state<LayoutTemplate | null>(null);
 
 	function handleNewFileCreate(jisToUsRemap: boolean) {
-		if (!newFileTemplate) return;
-		store.resetWithTemplate(newFileTemplate, jisToUsRemap);
+		if (!dialog.newFileTemplate) return;
+		store.resetWithTemplate(dialog.newFileTemplate, jisToUsRemap);
 		clearState();
 		settingsTabActive = false;
-		newFileConfirmOpen = false;
-		newFileTemplate = null;
-	}
-
-	const shareAvailable = isCompressionStreamAvailable();
-
-	// 共有 URL 復元用の状態
-	let importConfirmOpen = $state(false);
-	let importSummary = $state<ImportSummary>({ templateName: '', layerCount: 0, changedKeyCount: 0, changedSettingsCount: 0 });
-	let pendingImportState: ReturnType<typeof deserializeFromShare> | null = null;
-
-	// 共有 URL エラー表示用
-	let shareErrorMessage = $state<string | null>(null);
-
-	async function handleShare(): Promise<string> {
-		const shareData = serializeForShare(store.getState());
-		const encoded = await encodeShareData(shareData);
-		return generateShareUrl(encoded);
-	}
-
-	/**
-	 * URL ハッシュから共有データを検出・デコードし、確認ダイアログを表示する
-	 */
-	async function checkUrlHash() {
-		const hash = window.location.hash;
-		const encoded = extractEncodedFromHash(hash);
-		if (!encoded) return;
-
-		try {
-			const shareData = await decodeShareData(encoded);
-			const editorState = deserializeFromShare(shareData);
-			importSummary = createImportSummary(shareData, getTemplateName(store.template.id));
-			pendingImportState = editorState;
-			importConfirmOpen = true;
-		} catch (err) {
-			// ShareError はステージ別のユーザー向けメッセージを持つ
-			if (err instanceof ShareError) {
-				shareErrorMessage = err.message;
-			} else {
-				shareErrorMessage = m.error_share_loadFailed();
-			}
-			// localStorage の既存設定は変更しない（保全）
-		}
-		// ハッシュを除去（確認/キャンセルに関わらず）
-		history.replaceState(null, '', window.location.pathname + window.location.search);
+		dialog.closeNewFileDialog();
 	}
 
 	function handleImportConfirm() {
-		if (pendingImportState) {
-			store.restoreState(pendingImportState);
-			pendingImportState = null;
-		}
-		importConfirmOpen = false;
-	}
-
-	function handleImportCancel() {
-		pendingImportState = null;
-		importConfirmOpen = false;
+		if (pendingImportState) { store.restoreState(pendingImportState); pendingImportState = null; }
+		dialog.closeImportDialog();
 	}
 </script>
 
-<Header onexport={(f, kbdTarget) => {
-	if (f === 'kbd' && kbdTarget) {
-		handleExport(f, store.generateKbdForTarget(kbdTarget), store.keJsonText, store.ahkText);
-	} else {
-		handleExport(f, store.kbdText, store.keJsonText, store.ahkText);
-	}
-}} onnewfile={handleNewFile} onpreview={() => openPreviewPopup(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdTarget, (t) => store.setKbdTarget(t), store.kbdNotice)} onshare={handleShare} formatStatuses={store.formatStatuses} kbdTargetStatuses={store.kbdTargetStatuses} {persistenceError} {shareAvailable} />
+<Header
+	onexport={handleExportAction}
+	onnewfile={handleNewFile}
+	onpreview={handlePreview}
+	onshare={() => generateShareUrlFromState(store.getState())}
+	formatStatuses={store.formatStatuses}
+	kbdTargetStatuses={store.kbdTargetStatuses}
+	{persistenceError}
+	{shareAvailable}
+/>
 
 <main class="mx-auto max-w-screen-2xl p-4">
-
-	{#if shareErrorMessage}
+	{#if dialog.shareErrorMessage}
 		<div class="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-			<span>{shareErrorMessage}</span>
-			<button
-				class="ml-4 text-red-600 hover:text-red-800"
-				onclick={() => { shareErrorMessage = null; }}
-				aria-label={m.button_close()}
-				data-testid="btn-error-banner-close"
-			>&times;</button>
+			<span>{dialog.shareErrorMessage}</span>
+			<button class="ml-4 text-red-600 hover:text-red-800" onclick={() => { dialog.setShareError(null); }} aria-label={m.button_close()} data-testid="btn-error-banner-close">&times;</button>
 		</div>
 	{/if}
 
-	<!-- Layer tabs -->
 	<div class="mb-4">
 		<LayerTabs
 			layers={store.layers}
 			activeIndex={store.activeLayerIndex}
 			isSettingsActive={settingsTabActive}
-			onlayerswitch={handleLayerSwitch}
-			onlayeradd={handleLayerAdd}
+			onlayerswitch={(i) => { settingsTabActive = false; store.switchLayer(i); }}
+			onlayeradd={() => { const err = store.addLayer(`layer-${store.layers.length}`); if (err) alert(err); }}
 			onlayerdelete={handleLayerDelete}
-			onlayerrename={handleLayerRename}
-			onlayerreorder={handleLayerReorder}
-			onsettingsswitch={handleSettingsSwitch}
+			onlayerrename={(i, n) => { const err = store.renameLayer(i, n); if (err) alert(err); }}
+			onlayerreorder={(from, to) => store.reorderLayer(from, to)}
+			onsettingsswitch={() => { settingsTabActive = true; store.selectKey(null); }}
 		/>
 	</div>
 
 	{#if settingsTabActive}
-		<!-- Settings panel -->
 		<div class="rounded-lg border border-gray-200 bg-white p-4">
-			<GlobalSettingsPanel
-				tappingTerm={store.tappingTerm}
-				ontappingtermchange={(v) => store.setTappingTerm(v)}
-			/>
+			<GlobalSettingsPanel tappingTerm={store.tappingTerm} ontappingtermchange={(v) => store.setTappingTerm(v)} />
 		</div>
 	{:else}
 	<div class="flex flex-col gap-4">
-		<!-- Keyboard area (full width) -->
 		<div>
 			<KeyboardSvg
 				template={store.template}
 				activeLayer={store.activeLayer}
 				selectedKeyId={store.selectedKeyId}
-				jisToUsRemap={useUsLabels}
+				jisToUsRemap={store.useUsLabels}
 				onkeyselect={handleKeySelect}
 			/>
 		</div>
-
-		<!-- Action panel (full width, bottom) -->
 		<div class="rounded-lg border border-gray-200 bg-white p-4">
 			<ActionPanel
-				{selectedKey}
-				{currentAction}
+				selectedKey={store.selectedKey}
+				currentAction={store.currentAction}
 				layers={store.layers}
 				onactionchange={handleActionChange}
-				usMode={useUsLabels}
-				templateKanataNames={templateKanataNames}
+				usMode={store.useUsLabels}
+				templateKanataNames={store.templateKanataNames}
 				isAppleTemplate={store.template.keOnly === true}
 			/>
 		</div>
 	</div>
 	{/if}
-
 </main>
 
 <ConfirmDialog
-	open={confirmOpen}
-	title={confirmTitle}
-	description={confirmDesc}
-	confirmLabel={confirmLabel}
-	onconfirm={() => confirmAction?.()}
-	oncancel={() => (confirmOpen = false)}
+	open={dialog.confirmOpen} title={dialog.confirmTitle} description={dialog.confirmDesc}
+	confirmLabel={dialog.confirmLabel}
+	onconfirm={() => dialog.confirmAction?.()} oncancel={() => dialog.closeConfirmDialog()}
 />
-
 <NewFileConfirmDialog
-	open={newFileConfirmOpen}
-	templateName={newFileTemplate ? getTemplateName(newFileTemplate.id) : ''}
-	showJisUsToggle={newFileTemplate?.id === 'jis-109' || newFileTemplate?.id === 'apple-jis'}
-	showKeOnlyNotice={newFileTemplate?.keOnly === true}
-	oncreate={handleNewFileCreate}
-	oncancel={() => { newFileConfirmOpen = false; newFileTemplate = null; }}
+	open={dialog.newFileConfirmOpen}
+	templateName={dialog.newFileTemplate ? getTemplateName(dialog.newFileTemplate.id) : ''}
+	showJisUsToggle={dialog.newFileTemplate?.id === 'jis-109' || dialog.newFileTemplate?.id === 'apple-jis'}
+	showKeOnlyNotice={dialog.newFileTemplate?.keOnly === true}
+	oncreate={handleNewFileCreate} oncancel={() => dialog.closeNewFileDialog()}
 />
-
 <ImportConfirmDialog
-	open={importConfirmOpen}
-	summary={importSummary}
-	onconfirm={handleImportConfirm}
-	oncancel={handleImportCancel}
+	open={dialog.importConfirmOpen} summary={dialog.importSummary}
+	onconfirm={handleImportConfirm} oncancel={() => { pendingImportState = null; dialog.closeImportDialog(); }}
 />
-
 <DebugPanel {store} />

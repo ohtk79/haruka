@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import type { Layer, LayoutTemplate } from '$lib/models/types';
-	import { SHIFT_LABELS, type ShiftLabelEntry } from '$lib/models/shift-labels';
+	import { SHIFT_LABELS, type ShiftLabelEntry } from '$lib/models/key-metadata';
 	import KeySvg from './KeySvg.svelte';
 
 	interface Props {

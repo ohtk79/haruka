@@ -1,11 +1,12 @@
 // =============================================================================
 // .kbd Generator Service — Generates kanata .kbd text from EditorState
 // =============================================================================
-// Depends on: models/types.ts, models/jis-us-map.ts, models/constants.ts
+// Depends on: models/types.ts, models/jis-us-map.ts, models/constants.ts, models/action-handler.ts
 // Tested by: tests/unit/kbd-generator.test.ts, tests/unit/kbd-generator-jis-us.test.ts
 // Called from: stores/editor.svelte.ts
 
 import type { EditorState, KeyAction, Layer, PhysicalKey, KbdTargetOs } from '$lib/models/types';
+import { visitAction } from '$lib/models/action-handler';
 import { JIS_TO_US_MAPPINGS, JIS_TO_US_MAP_BY_KEY, JIS_TO_US_MAP_BY_KANATA_NAME } from '$lib/models/jis-us-map';
 import { BASE_LAYER_NAME, KANATA_CHORD_PREFIX, MODIFIER_SORT_ORDER } from '$lib/models/constants';
 import { resolveKbdAction } from '$lib/models/kbd-target-registry';
@@ -106,20 +107,51 @@ export function generateKbd(state: EditorState, target: KbdTargetOs = 'macos'): 
 		for (const row of rows) {
 			const rowText = row
 				.map((key, i) => {
-					// JIS→US: replace 16 target keys in base layer with @jus-* references
-					const isBaseLayer = layer.name === BASE_LAYER_NAME;
+					// JIS→US: replace 16 target keys with @jus-* references
 					const action = layer.actions.get(key.id);
-					const isDefault = !action || (action.type === 'key' && action.value === key.kanataName);
-					const jisUsMapping = isBaseLayer && state.jisToUsRemap
+					// 非ベースレイヤーの未設定キー (!action) は transparent 扱い — JIS→US 変換しない
+					const isDefault = action !== undefined
+						&& action.type === 'key'
+						&& action.value === key.kanataName
+						&& (!action.modifiers || action.modifiers.length === 0);
+					const jisUsMapping = state.jisToUsRemap
 						? isDefault
 							? JIS_TO_US_MAP_BY_KEY.get(key.id)
 							: (action && action.type === 'key' && (!action.modifiers || action.modifiers.length === 0))
 								? JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value)
 								: undefined
 						: undefined;
-					const text = jisUsMapping
-						? `@${jisUsMapping.aliasName}`
-					: actionToKanataText(action, key, layer.name, allAliases, target);
+
+					// Shift 修飾付き JIS→US 変換: shiftExpr ベースの単一出力
+					let shiftJisUsText: string | undefined;
+					if (!jisUsMapping && state.jisToUsRemap
+						&& action && action.type === 'key'
+						&& hasShiftModifier(action.modifiers)) {
+						const shiftMapping = JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value);
+						if (shiftMapping) {
+							const otherMods = removeShiftModifiers(action.modifiers!);
+							const shiftExpr = shiftMapping.shiftExpr;
+							if (shiftExpr.startsWith('S-')) {
+								// カテゴリ A/C: S- 接頭辞を分解して lsft を effectiveMods に追加
+								const bareKey = shiftExpr.slice(2);
+								const effectiveMods = [...otherMods, 'lsft'];
+								shiftJisUsText = modifiersToKanata(effectiveMods, bareKey, target);
+							} else {
+								// カテゴリ B: 素キー。Shift は吸収済み
+								if (otherMods.length === 0) {
+									shiftJisUsText = shiftExpr;
+								} else {
+									shiftJisUsText = modifiersToKanata(otherMods, shiftExpr, target);
+								}
+							}
+						}
+					}
+
+					const text = shiftJisUsText
+						? shiftJisUsText
+						: jisUsMapping
+							? `@${jisUsMapping.aliasName}`
+							: actionToKanataText(action, key, layer.name, allAliases, target);
 					const colIdx = getColumnIndex(rows, row, i);
 					return padRight(text, columnWidths[colIdx]);
 				})
@@ -136,6 +168,16 @@ export function generateKbd(state: EditorState, target: KbdTargetOs = 'macos'): 
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/** action.modifiers に lsft / rsft が含まれるか */
+function hasShiftModifier(modifiers: string[] | undefined): boolean {
+	return modifiers !== undefined && modifiers.some(m => m === 'lsft' || m === 'rsft');
+}
+
+/** action.modifiers から lsft / rsft を除去して残りを返す */
+function removeShiftModifiers(modifiers: string[]): string[] {
+	return modifiers.filter(m => m !== 'lsft' && m !== 'rsft');
+}
 
 interface Alias {
 	name: string;
@@ -204,20 +246,37 @@ function calculateColumnWidths(rows: PhysicalKey[][], layers: Layer[], jisToUsRe
 			const key = row[i];
 			let maxWidth = toKanataKeyName(key.kanataName ?? '', target).length;
 
-			// Account for @jus-* alias references in base layer
+			// Account for @jus-* alias references
 			if (jisToUsRemap) {
 				const jisUsMapping = JIS_TO_US_MAP_BY_KEY.get(key.id);
 				if (jisUsMapping) {
 					maxWidth = Math.max(maxWidth, `@${jisUsMapping.aliasName}`.length);
 				}
-				// リマップ先が変換対象キーの場合も列幅に反映
-				const baseLayer = layers.find((l) => l.name === BASE_LAYER_NAME);
-				if (baseLayer) {
-					const action = baseLayer.actions.get(key.id);
+				// 全レイヤーのリマップ先が変換対象キーの場合も列幅に反映
+				for (const layer of layers) {
+					const action = layer.actions.get(key.id);
 					if (action && action.type === 'key' && (!action.modifiers || action.modifiers.length === 0)) {
 						const remapMapping = JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value);
 						if (remapMapping) {
 							maxWidth = Math.max(maxWidth, `@${remapMapping.aliasName}`.length);
+						}
+					}
+					// Shift 修飾付き JIS→US 変換後の出力幅も反映
+					if (action && action.type === 'key' && hasShiftModifier(action.modifiers)) {
+						const shiftMapping = JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value);
+						if (shiftMapping) {
+							const otherMods = removeShiftModifiers(action.modifiers!);
+							const shiftExpr = shiftMapping.shiftExpr;
+							let shiftText: string;
+							if (shiftExpr.startsWith('S-')) {
+								const bareKey = shiftExpr.slice(2);
+								shiftText = modifiersToKanata([...otherMods, 'lsft'], bareKey, target);
+							} else {
+								shiftText = otherMods.length === 0
+									? shiftExpr
+									: modifiersToKanata(otherMods, shiftExpr, target);
+							}
+							maxWidth = Math.max(maxWidth, shiftText.length);
 						}
 					}
 				}
@@ -333,37 +392,29 @@ function actionToKanataTextRaw(
 ): string {
 	if (!action) return mode === 'layer' ? toKanataKeyName(key.kanataName ?? '_', target) : '_';
 
-	switch (action.type) {
-		case 'key': {
-			if (action.modifiers && action.modifiers.length > 0) {
-				return modifiersToKanata(action.modifiers, action.value, target);
+	return visitAction(action, {
+		key: (a) => {
+			if (a.modifiers && a.modifiers.length > 0) {
+				return modifiersToKanata(a.modifiers, a.value, target);
 			}
-			const strategy = resolveKbdAction(action.value, target);
+			const strategy = resolveKbdAction(a.value, target);
 			switch (strategy.type) {
 				case 'native-key': return strategy.kanataToken;
 				case 'fixed-arbitrary-code': return strategy.kanataExpr;
 				case 'unsupported':
-					throw new Error(`unsupported action: ${action.value} for target ${target}`);
+					throw new Error(`unsupported action: ${a.value} for target ${target}`);
 			}
-		}
-		/* v8 ignore next */
-		break; // unreachable — TypeScript exhaustiveness
-		case 'transparent':
-			return '_';
-		case 'no-op':
-			return 'XX';
-		case 'layer-while-held':
-			return `(layer-while-held ${action.layer})`;
-		case 'layer-switch':
-			return `(layer-switch ${action.layer})`;
-		case 'tap-hold': {
+		},
+		transparent: () => '_',
+		'no-op': () => 'XX',
+		'layer-while-held': (a) => `(layer-while-held ${a.layer})`,
+		'layer-switch': (a) => `(layer-switch ${a.layer})`,
+		'tap-hold': () => {
 			if (mode === 'alias') return '_';
 			const aliasName = `${key.kanataName ?? ''}_${layerName}`;
 			return `@${aliasName}`;
 		}
-		default:
-			return mode === 'layer' ? toKanataKeyName(key.kanataName ?? '_', target) : '_';
-	}
+	});
 }
 
 function padRight(str: string, width: number): string {

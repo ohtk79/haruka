@@ -1,11 +1,12 @@
 // =============================================================================
 // KE Complex Modifications JSON Generator — Generates Karabiner-Elements JSON
 // =============================================================================
-// Depends on: models/types.ts, models/ke-keycode-map.ts, models/constants.ts, models/jis-us-map.ts
+// Depends on: models/types.ts, models/ke-keycode-map.ts, models/constants.ts, models/jis-us-map.ts, models/action-handler.ts
 // Tested by: tests/unit/ke-generator.test.ts
 // Called from: stores/editor.svelte.ts
 
 import type { EditorState, KeyAction, Layer, PhysicalKey } from '$lib/models/types';
+import { visitAction, visitHoldAction } from '$lib/models/action-handler';
 import {
 	KANATA_TO_KE_MAP,
 	getKeFromKeyCode,
@@ -134,6 +135,65 @@ export function generateKeJson(state: EditorState): KeGeneratorResult {
 			const fromKeyCode = getKeKeyCodeFromPhysicalKey(key);
 			if (!fromKeyCode) continue;
 
+			// JIS→US 変換: 非ベースレイヤーの単純リマップ / デフォルトキーに 2-manipulator ルールを生成
+			if (state.jisToUsRemap && action.type === 'key'
+				&& (!action.modifiers || action.modifiers.length === 0)) {
+				const jisUsMapping = JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value);
+				if (jisUsMapping) {
+					const normalTo = parseKanataExpr(jisUsMapping.keNormalExpr ?? jisUsMapping.normalExpr);
+					const shiftTo = parseKanataExpr(jisUsMapping.keShiftExpr ?? jisUsMapping.shiftExpr);
+					if (normalTo && shiftTo) {
+						rules.push({
+							description: `haruka: ${layer.name} - ${jisUsMapping.aliasName} (${key.kanataName ?? key.id})`,
+							manipulators: [
+								{
+									type: 'basic',
+									from: { key_code: fromKeyCode, modifiers: { mandatory: ['shift'], optional: ['any'] } },
+									to: [shiftTo],
+									conditions: [{ type: 'variable_if', name: 'haruka_layer', value: layer.name }]
+								},
+								{
+									type: 'basic',
+									from: { key_code: fromKeyCode, modifiers: { optional: ['any'] } },
+									to: [normalTo],
+									conditions: [{ type: 'variable_if', name: 'haruka_layer', value: layer.name }]
+								}
+							]
+						});
+						continue;
+					}
+				}
+			}
+
+			// JIS→US 変換: 非ベースレイヤーの Shift 修飾付きリマップに単一 manipulator を生成
+			if (state.jisToUsRemap && action.type === 'key'
+				&& hasShiftModifier(action.modifiers)) {
+				const jisUsMapping = JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value);
+				if (jisUsMapping) {
+					const shiftTo = parseKanataExpr(jisUsMapping.keShiftExpr ?? jisUsMapping.shiftExpr);
+					if (shiftTo) {
+						const otherMods = removeShiftModifiers(action.modifiers!)
+							.map((m) => KE_MODIFIER_MAP[m])
+							.filter(Boolean);
+						const mergedModifiers = [...(shiftTo.modifiers ?? []), ...otherMods];
+						const toEvent: { key_code: string; modifiers?: string[] } = { key_code: shiftTo.key_code };
+						if (mergedModifiers.length > 0) {
+							toEvent.modifiers = mergedModifiers;
+						}
+						rules.push({
+							description: `haruka: ${layer.name} - ${jisUsMapping.aliasName} (${key.kanataName ?? key.id})`,
+							manipulators: [{
+								type: 'basic',
+								from: { key_code: fromKeyCode, modifiers: { optional: ['any'] } },
+								to: [toEvent],
+								conditions: [{ type: 'variable_if', name: 'haruka_layer', value: layer.name }]
+							}]
+						});
+						continue;
+					}
+				}
+			}
+
 			const manipulator = buildManipulator(action, key, layer.name, state);
 			if (!manipulator) continue;
 
@@ -164,9 +224,10 @@ export function generateKeJson(state: EditorState): KeGeneratorResult {
 			if (isDefaultAction(action, key)) continue;
 
 			// JIS→US変換対象への単純リマップは buildJisUsRules で処理済み
+			// Shift 修飾付きも buildJisUsRules で処理済みとしてスキップ
 			if (state.jisToUsRemap && action.type === 'key'
-				&& (!action.modifiers || action.modifiers.length === 0)
-				&& JIS_TO_US_MAP_BY_KANATA_NAME.has(action.value)) continue;
+				&& JIS_TO_US_MAP_BY_KANATA_NAME.has(action.value)
+				&& (!action.modifiers || action.modifiers.length === 0 || hasShiftModifier(action.modifiers))) continue;
 
 			// Check for unsupported media keys
 			if (key.kanataName && isKeUnsupported(key.kanataName)) {
@@ -202,6 +263,16 @@ export function generateKeJson(state: EditorState): KeGeneratorResult {
 // Internal Helpers
 // =============================================================================
 
+/** action.modifiers に lsft / rsft が含まれるか */
+function hasShiftModifier(modifiers: string[] | undefined): boolean {
+	return modifiers !== undefined && modifiers.some(m => m === 'lsft' || m === 'rsft');
+}
+
+/** action.modifiers から lsft / rsft を除去して残りを返す */
+function removeShiftModifiers(modifiers: string[]): string[] {
+	return modifiers.filter(m => m !== 'lsft' && m !== 'rsft');
+}
+
 /**
  * Check if an action is the default for a key (no remap needed)
  */
@@ -230,8 +301,8 @@ function buildJisUsRules(state: EditorState, baseLayer: Layer): KeRule[] {
 		const fromKeyCode = getKeFromKeyCode(mapping.kanataDefsrcName);
 		if (!fromKeyCode) continue;
 
-		const normalTo = parseKanataExpr(mapping.normalExpr);
-		const shiftTo = parseKanataExpr(mapping.shiftExpr);
+		const normalTo = parseKanataExpr(mapping.keNormalExpr ?? mapping.normalExpr);
+		const shiftTo = parseKanataExpr(mapping.keShiftExpr ?? mapping.shiftExpr);
 		if (!normalTo || !shiftTo) continue;
 
 		rules.push({
@@ -257,7 +328,9 @@ function buildJisUsRules(state: EditorState, baseLayer: Layer): KeRule[] {
 		if (!action) continue;
 		if (isDefaultAction(action, key)) continue;
 		if (action.type !== 'key') continue;
-		if (action.modifiers && action.modifiers.length > 0) continue;
+
+		// Shift を含まない修飾キーのみ → 変換スキップ（従来通り）
+		if (action.modifiers && action.modifiers.length > 0 && !hasShiftModifier(action.modifiers)) continue;
 
 		const mapping = JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value);
 		if (!mapping) continue;
@@ -265,8 +338,33 @@ function buildJisUsRules(state: EditorState, baseLayer: Layer): KeRule[] {
 		const fromKeyCode = getKeKeyCodeFromPhysicalKey(key);
 		if (!fromKeyCode) continue;
 
-		const normalTo = parseKanataExpr(mapping.normalExpr);
-		const shiftTo = parseKanataExpr(mapping.shiftExpr);
+		// Shift 修飾付き → shiftExpr ベースの単一 manipulator
+		if (hasShiftModifier(action.modifiers)) {
+			const shiftTo = parseKanataExpr(mapping.keShiftExpr ?? mapping.shiftExpr);
+			if (shiftTo) {
+				const otherMods = removeShiftModifiers(action.modifiers!)
+					.map((m) => KE_MODIFIER_MAP[m])
+					.filter(Boolean);
+				const mergedModifiers = [...(shiftTo.modifiers ?? []), ...otherMods];
+				const toEvent: { key_code: string; modifiers?: string[] } = { key_code: shiftTo.key_code };
+				if (mergedModifiers.length > 0) {
+					toEvent.modifiers = mergedModifiers;
+				}
+				rules.push({
+					description: `haruka: ${BASE_LAYER_NAME} - ${mapping.aliasName} (${key.kanataName ?? key.id})`,
+					manipulators: [{
+						type: 'basic',
+						from: { key_code: fromKeyCode, modifiers: { optional: ['any'] } },
+						to: [toEvent]
+					}]
+				});
+			}
+			continue;
+		}
+
+		// 修飾なし → 従来の 2-manipulator ルール
+		const normalTo = parseKanataExpr(mapping.keNormalExpr ?? mapping.normalExpr);
+		const shiftTo = parseKanataExpr(mapping.keShiftExpr ?? mapping.shiftExpr);
 		if (!normalTo || !shiftTo) continue;
 
 		rules.push({
@@ -317,43 +415,35 @@ function buildManipulator(
 		modifiers: { optional: ['any'] }
 	};
 
-	switch (action.type) {
+	return visitAction<KeManipulator | null>(action, {
 		// Pattern A: Simple key remap (no modifiers)
 		// Pattern B: Key with modifiers
-		case 'key': {
-			const toKeyCode = getKeToKeyCode(action.value);
+		key: (a) => {
+			const toKeyCode = getKeToKeyCode(a.value);
 			if (!toKeyCode) return null;
 
 			const toEvent: { key_code: string; modifiers?: string[] } = { key_code: toKeyCode };
 
-			if (action.modifiers && action.modifiers.length > 0) {
-				toEvent.modifiers = action.modifiers
+			if (a.modifiers && a.modifiers.length > 0) {
+				toEvent.modifiers = a.modifiers
 					.map((m) => KE_MODIFIER_MAP[m])
 					.filter(Boolean);
 			}
 
-			return { type: 'basic', from, to: [toEvent] };
-		}
+			return { type: 'basic' as const, from, to: [toEvent] };
+		},
 
 		// Pattern G: no-op
-		case 'no-op':
-			return { type: 'basic', from, to: [{ key_code: 'vk_none' }] };
+		'no-op': () => ({ type: 'basic' as const, from, to: [{ key_code: 'vk_none' }] }),
 
 		// Pattern C/D/E: tap-hold
-		case 'tap-hold':
-			return buildTapHoldManipulator(action, from, state);
+		'tap-hold': (a) => buildTapHoldManipulator(a, from, state),
 
 		// These should not appear at top level, but handle gracefully
-		case 'layer-while-held':
-		case 'layer-switch':
-			return null;
-
-		case 'transparent':
-			return null;
-
-		default:
-			return null;
-	}
+		'layer-while-held': () => null,
+		'layer-switch': () => null,
+		transparent: () => null
+	});
 }
 
 /**
@@ -380,38 +470,34 @@ function buildTapHoldManipulator(
 	}
 
 	// Build hold action
-	switch (action.holdAction.type) {
-		case 'key': {
+	visitHoldAction(action.holdAction, {
+		key: (a) => {
 			// Pattern C: hold = key
-			const holdEvent = buildSimpleToEvent(action.holdAction);
+			const holdEvent = buildSimpleToEvent(a);
 			if (holdEvent) {
 				manipulator.to_if_held_down = [holdEvent];
 			}
-			break;
-		}
-		case 'no-op': {
+		},
+		'no-op': () => {
 			// hold = no-op: use vk_none
 			manipulator.to_if_held_down = [{ key_code: 'vk_none' }];
-			break;
-		}
-		case 'layer-while-held': {
+		},
+		'layer-while-held': (a) => {
 			// Pattern D: hold = layer-while-held
 			manipulator.to = [
-				{ set_variable: { name: 'haruka_layer', value: action.holdAction.layer } }
+				{ set_variable: { name: 'haruka_layer', value: a.layer } }
 			];
 			manipulator.to_after_key_up = [
 				{ set_variable: { name: 'haruka_layer', value: BASE_LAYER_NAME } }
 			];
-			break;
-		}
-		case 'layer-switch': {
+		},
+		'layer-switch': (a) => {
 			// Pattern E: hold = layer-switch
 			manipulator.to_if_held_down = [
-				{ set_variable: { name: 'haruka_layer', value: action.holdAction.layer } }
+				{ set_variable: { name: 'haruka_layer', value: a.layer } }
 			];
-			break;
 		}
-	}
+	});
 
 	return manipulator;
 }
@@ -422,23 +508,23 @@ function buildTapHoldManipulator(
 function buildSimpleToEvent(
 	action: KeyAction
 ): { key_code: string; modifiers?: string[] } | null {
-	switch (action.type) {
-		case 'key': {
-			const toKeyCode = getKeToKeyCode(action.value);
+	return visitAction(action, {
+		key: (a) => {
+			const toKeyCode = getKeToKeyCode(a.value);
 			if (!toKeyCode) return null;
 
 			const event: { key_code: string; modifiers?: string[] } = { key_code: toKeyCode };
-			if (action.modifiers && action.modifiers.length > 0) {
-				event.modifiers = action.modifiers
+			if (a.modifiers && a.modifiers.length > 0) {
+				event.modifiers = a.modifiers
 					.map((m) => KE_MODIFIER_MAP[m])
 					.filter(Boolean);
 			}
 			return event;
-		}
-		case 'transparent':
-		case 'no-op':
-			return null;
-		default:
-			return null;
-	}
+		},
+		transparent: () => null,
+		'no-op': () => null,
+		'tap-hold': () => null,
+		'layer-while-held': () => null,
+		'layer-switch': () => null
+	});
 }

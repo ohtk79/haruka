@@ -6,9 +6,9 @@
 
 import type { KeyAction, PhysicalKey } from '$lib/models/types';
 import { hasModifiers } from '$lib/models/types';
+import { visitAction } from '$lib/models/action-handler';
 import { MODIFIER_DISPLAY_MAP } from '$lib/models/constants';
-import { KANATA_KEY_LABEL_MAP, US_KEY_LABELS } from '$lib/utils/kanata-keys';
-import type { ShiftLabelEntry } from '$lib/models/shift-labels';
+import { KANATA_KEY_LABEL_MAP, US_KEY_LABELS, type ShiftLabelEntry } from '$lib/models/key-metadata';
 
 /**
  * Get display label for an action.
@@ -20,29 +20,22 @@ export function getActionLabel(
 	jisToUsRemap: boolean
 ): string {
 	if (!act) return key.label;
-	switch (act.type) {
-		case 'key': {
-			const jisLabel = KANATA_KEY_LABEL_MAP.get(act.value) ?? act.value;
-			const keyLabel = (jisToUsRemap && US_KEY_LABELS.get(act.value)) || jisLabel;
-			if (act.modifiers && act.modifiers.length > 0) {
-				const mods = act.modifiers.map((m) => MODIFIER_DISPLAY_MAP[m] ?? m).join('-');
+	return visitAction(act, {
+		key: (a) => {
+			const jisLabel = KANATA_KEY_LABEL_MAP.get(a.value) ?? a.value;
+			const keyLabel = (jisToUsRemap && US_KEY_LABELS.get(a.value)) || jisLabel;
+			if (a.modifiers && a.modifiers.length > 0) {
+				const mods = a.modifiers.map((m) => MODIFIER_DISPLAY_MAP[m] ?? m).join('-');
 				return `${mods}-${keyLabel}`;
 			}
 			return keyLabel;
-		}
-		case 'transparent':
-			return '_';
-		case 'no-op':
-			return 'XX';
-		case 'layer-while-held':
-			return act.layer;
-		case 'layer-switch':
-			return act.layer;
-		case 'tap-hold':
-			return ''; // handled by 2-line display
-		default:
-			return key.label;
-	}
+		},
+		transparent: () => '_',
+		'no-op': () => 'XX',
+		'layer-while-held': (a) => a.layer,
+		'layer-switch': (a) => a.layer,
+		'tap-hold': () => '' // handled by 2-line display
+	});
 }
 
 /**
@@ -50,21 +43,14 @@ export function getActionLabel(
  */
 export function getActionClass(act: KeyAction | undefined): string {
 	if (!act) return 'key-normal';
-	switch (act.type) {
-		case 'key':
-			return hasModifiers(act) ? 'key-chord' : 'key-normal';
-		case 'transparent':
-			return 'key-transparent';
-		case 'no-op':
-			return 'key-noop';
-		case 'layer-while-held':
-		case 'layer-switch':
-			return 'key-layer';
-		case 'tap-hold':
-			return 'key-taphold';
-		default:
-			return 'key-normal';
-	}
+	return visitAction(act, {
+		key: (a) => hasModifiers(a) ? 'key-chord' : 'key-normal',
+		transparent: () => 'key-transparent',
+		'no-op': () => 'key-noop',
+		'layer-while-held': () => 'key-layer',
+		'layer-switch': () => 'key-layer',
+		'tap-hold': () => 'key-taphold'
+	});
 }
 
 /**

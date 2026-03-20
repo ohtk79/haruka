@@ -580,4 +580,234 @@ describe('kbd-generator with JIS→US remap', () => {
 			expect(aliasLine).toContain('@jus-grv');
 		});
 	});
+
+	// =========================================================================
+	// 非ベースレイヤー JIS→US 変換テスト (017-fix-jis-us-nonbase-layer)
+	// =========================================================================
+
+	describe('JIS→US remap on non-base layers', () => {
+		function createStateWithLayer1(jisToUsRemap: boolean): EditorState {
+			const state = createState(jisToUsRemap);
+			const layer1Actions = new Map<string, KeyAction>();
+			for (const key of JIS_109_TEMPLATE.keys) {
+				layer1Actions.set(key.id, { type: 'transparent' });
+			}
+			state.layers.push({ name: 'layer-1', actions: layer1Actions });
+			return state;
+		}
+
+		function getLayerSection(result: string, layerName: string): string {
+			const lines = result.split('\n');
+			const start = lines.findIndex((l) => l.includes(`(deflayer ${layerName}`));
+			const end = lines.findIndex((l, i) => i > start && l.trim() === ')');
+			return lines.slice(start, end + 1).join('\n');
+		}
+
+		// KBD-NB-001: 非ベースレイヤーに変換対象キー → @jus-* が出力される
+		it('should output @jus-2 when non-base layer key is remapped to 2', () => {
+			const state = createStateWithLayer1(true);
+			state.layers[1].actions.set('KeyA', { type: 'key', value: '2' });
+			const result = generateKbd(state);
+
+			const layer1Section = getLayerSection(result, 'layer-1');
+			expect(layer1Section).toContain('@jus-2');
+		});
+
+		// KBD-NB-002: 非ベースレイヤーの transparent → _ が出力される
+		it('should output _ for transparent keys in non-base layer', () => {
+			const state = createStateWithLayer1(true);
+			// 全キー transparent のまま
+			const result = generateKbd(state);
+
+			const layer1Section = getLayerSection(result, 'layer-1');
+			expect(layer1Section).not.toContain('@jus-');
+			// transparent は _ として出力される
+			expect(layer1Section).toContain(' _ ');
+		});
+
+		// KBD-NB-003: 非ベースレイヤーの未設定キー（action なし）→ _ が出力される
+		it('should output default key name for undefined action in non-base layer', () => {
+			const state = createStateWithLayer1(true);
+			// KeyA の action を削除（Map からキーを消す）
+			state.layers[1].actions.delete('KeyA');
+			const result = generateKbd(state);
+
+			const layer1Section = getLayerSection(result, 'layer-1');
+			// 未設定キーに @jus-* は出力されない
+			expect(layer1Section).not.toMatch(/@jus-a[\s)]/);
+		});
+
+		// KBD-NB-004: jisToUsRemap=false → 非ベースレイヤーでも @jus-* なし
+		it('should not output @jus-* in non-base layer when jisToUsRemap=false', () => {
+			const state = createStateWithLayer1(false);
+			state.layers[1].actions.set('KeyA', { type: 'key', value: '2' });
+			const result = generateKbd(state);
+
+			const layer1Section = getLayerSection(result, 'layer-1');
+			expect(layer1Section).not.toContain('@jus-');
+		});
+
+		// KBD-NB-005: 非ベースレイヤーに変換対象外キー → 素のキー名
+		it('should output plain key name for non-target key in non-base layer', () => {
+			const state = createStateWithLayer1(true);
+			state.layers[1].actions.set('KeyA', { type: 'key', value: 'b' });
+			const result = generateKbd(state);
+
+			const layer1Section = getLayerSection(result, 'layer-1');
+			expect(layer1Section).not.toMatch(/@jus-b[\s)]/);
+			expect(layer1Section).toMatch(/\bb\b/);
+		});
+
+		// KBD-NB-006: 非ベースレイヤーに修飾キー付き変換対象キー → 修飾キー表現
+		it('should not apply JIS→US for key with modifiers in non-base layer', () => {
+			const state = createStateWithLayer1(true);
+			state.layers[1].actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lctl'] });
+			const result = generateKbd(state);
+
+			const layer1Section = getLayerSection(result, 'layer-1');
+			expect(layer1Section).not.toContain('@jus-2');
+			expect(layer1Section).toContain('C-2');
+		});
+
+		// KBD-NB-007: 物理位置ベースのデフォルトキー → @jus-* が出力される
+		it('should output @jus-2 when Digit2 is explicitly set to 2 in non-base layer', () => {
+			const state = createStateWithLayer1(true);
+			state.layers[1].actions.set('Digit2', { type: 'key', value: '2' });
+			const result = generateKbd(state);
+
+			const layer1Section = getLayerSection(result, 'layer-1');
+			expect(layer1Section).toContain('@jus-2');
+		});
+
+		// KBD-NB-008: 複数レイヤーに異なる変換対象キー → 各レイヤーに正しい @jus-*
+		it('should output correct @jus-* for multiple non-base layers', () => {
+			const state = createStateWithLayer1(true);
+			state.layers[1].actions.set('KeyA', { type: 'key', value: '2' });
+
+			const layer2Actions = new Map<string, KeyAction>();
+			for (const key of JIS_109_TEMPLATE.keys) {
+				layer2Actions.set(key.id, { type: 'transparent' });
+			}
+			layer2Actions.set('KeyB', { type: 'key', value: '6' });
+			state.layers.push({ name: 'layer-2', actions: layer2Actions });
+
+			const result = generateKbd(state);
+
+			const layer1Section = getLayerSection(result, 'layer-1');
+			expect(layer1Section).toContain('@jus-2');
+			expect(layer1Section).not.toContain('@jus-6');
+
+			const layer2Section = getLayerSection(result, 'layer-2');
+			expect(layer2Section).toContain('@jus-6');
+			expect(layer2Section).not.toContain('@jus-2');
+		});
+	});
+
+	// =========================================================================
+	// Shift 修飾 + JIS→US 変換テスト (018-fix-shift-jis-us-remap)
+	// =========================================================================
+
+	describe('JIS→US remap with Shift modifier', () => {
+		function createStateWithLayer1(jisToUsRemap: boolean): EditorState {
+			const state = createState(jisToUsRemap);
+			const layer1Actions = new Map<string, KeyAction>();
+			for (const key of JIS_109_TEMPLATE.keys) {
+				layer1Actions.set(key.id, { type: 'transparent' });
+			}
+			state.layers.push({ name: 'layer-1', actions: layer1Actions });
+			return state;
+		}
+
+		function getLayerSection(result: string, layerName: string): string {
+			const lines = result.split('\n');
+			const start = lines.findIndex((l) => l.includes(`(deflayer ${layerName}`));
+			const end = lines.findIndex((l, i) => i > start && l.trim() === ')');
+			return lines.slice(start, end + 1).join('\n');
+		}
+
+		// KBD-JR-SHIFT-001: Shift+2 → `[`（カテゴリ B、Shift 吸収）
+		it('should output [ when key 2 has lsft modifier with JIS→US remap', () => {
+			const state = createState(true);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lsft'] });
+			const result = generateKbd(state);
+
+			const baseSection = getLayerSection(result, 'layer-0');
+			// KeyA 位置に [ が出力される（@jus-2 ではない）
+			expect(baseSection).toContain('[');
+			// S-2 は出力されない
+			expect(baseSection).not.toContain('S-2');
+		});
+
+		// KBD-JR-SHIFT-002: Shift+grv → `S-=`（カテゴリ A、S- 接頭辞）
+		it('should output S-= when key grv has lsft modifier with JIS→US remap', () => {
+			const state = createState(true);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: 'grv', modifiers: ['lsft'] });
+			const result = generateKbd(state);
+
+			const baseSection = getLayerSection(result, 'layer-0');
+			expect(baseSection).toContain('S-=');
+		});
+
+		// KBD-JR-SHIFT-003: Shift+Ctrl+2 → `C-[`（複合修飾キー）
+		it('should output C-[ when key 2 has lsft and lctl modifiers with JIS→US remap', () => {
+			const state = createState(true);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lsft', 'lctl'] });
+			const result = generateKbd(state);
+
+			const baseSection = getLayerSection(result, 'layer-0');
+			expect(baseSection).toContain('C-[');
+		});
+
+		// KBD-JR-SHIFT-004: rsft+; → `'`（右 Shift、カテゴリ B）
+		it('should output quote when key ; has rsft modifier with JIS→US remap', () => {
+			const state = createState(true);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: ';', modifiers: ['rsft'] });
+			const result = generateKbd(state);
+
+			const baseSection = getLayerSection(result, 'layer-0');
+			expect(baseSection).toContain("'");
+		});
+
+		// KBD-JR-SHIFT-005: jisToUsRemap=false → Shift+2 は S-2（変換なし）
+		it('should output S-2 when jisToUsRemap is false', () => {
+			const state = createState(false);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lsft'] });
+			const result = generateKbd(state);
+
+			const baseSection = getLayerSection(result, 'layer-0');
+			expect(baseSection).toContain('S-2');
+		});
+
+		// KBD-JR-SHIFT-006: Ctrl+2（Shift なし）→ C-2（JIS→US 変換なし）
+		it('should output C-2 when key 2 has only lctl modifier with JIS→US remap', () => {
+			const state = createState(true);
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lctl'] });
+			const result = generateKbd(state);
+
+			const baseSection = getLayerSection(result, 'layer-0');
+			expect(baseSection).toContain('C-2');
+			expect(baseSection).not.toContain('C-[');
+		});
+
+		// KBD-NB-SHIFT-001: 非ベースレイヤー Shift+2 → `[`
+		it('should output [ when non-base layer key 2 has lsft modifier', () => {
+			const state = createStateWithLayer1(true);
+			state.layers[1].actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lsft'] });
+			const result = generateKbd(state);
+
+			const layer1Section = getLayerSection(result, 'layer-1');
+			expect(layer1Section).toContain('[');
+			expect(layer1Section).not.toContain('S-2');
+		});
+
+		// KBD-NB-SHIFT-002: 非ベースレイヤー Shift+Ctrl+grv → `C-S-=`
+		it('should output C-S-= when non-base layer key grv has lsft and lctl modifiers', () => {
+			const state = createStateWithLayer1(true);
+			state.layers[1].actions.set('KeyA', { type: 'key', value: 'grv', modifiers: ['lsft', 'lctl'] });
+			const result = generateKbd(state);
+
+			const layer1Section = getLayerSection(result, 'layer-1');
+			expect(layer1Section).toContain('C-S-=');
+		});
+	});
 });

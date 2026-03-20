@@ -34,10 +34,14 @@ export interface JisToUsMapping {
 	usNormal: string;
 	/** US配列のShift文字（表示用） */
 	usShift: string;
+	/** KE用の通常出力式（省略時は normalExpr を使用） */
+	keNormalExpr?: string;
+	/** KE用のShift出力式（省略時は shiftExpr を使用） */
+	keShiftExpr?: string;
 }
 
 // Conversion-specific entries: [kanataName, aliasName, normalExpr, shiftExpr, needsReleaseKey, displayOverrides?]
-type ConvEntry = [string, string, string, string, boolean, Partial<{ jN: string; jS: string; uN: string; uS: string }>?];
+type ConvEntry = [string, string, string, string, boolean, Partial<{ jN: string; jS: string; uN: string; uS: string; keN: string; keS: string }>?];
 
 const CONV_ENTRIES: ConvEntry[] = [
 	['grv', 'jus-grv', 'S-[', 'S-=', true, { jS: '\u2014' }],
@@ -47,15 +51,15 @@ const CONV_ENTRIES: ConvEntry[] = [
 	['8', 'jus-8', '8', "S-'", true],
 	['9', 'jus-9', '9', 'S-8', true],
 	['0', 'jus-0', '0', 'S-9', true],
-	['-', 'jus-min', '-', 'S-ro', true],
+	['-', 'jus-min', '-', 'S-ro', true, { keS: 'ro' }],
 	['=', 'jus-eq', 'S--', 'S-;', true],
 	['[', 'jus-lbr', ']', 'S-]', true],
 	[']', 'jus-rbr', '\\', 'S-\\', true],
 	[';', 'jus-scl', ';', "'", true],
 	["'", 'jus-quo', 'S-7', 'S-2', true],
-	['\\', 'jus-bsl', 'ro', 'S-\u00A5', true],
-	['\u00A5', 'jus-yen', 'ro', 'S-\u00A5', false],
-	['ro', 'jus-ro', 'ro', 'S-\u00A5', false, { jN: '\\', uN: '\\', uS: '|' }],
+	['\\', 'jus-bsl', 'ro', 'S-\u00A5', true, { keN: '\u00A5' }],
+	['\u00A5', 'jus-yen', 'ro', 'S-\u00A5', false, { keN: '\u00A5' }],
+	['ro', 'jus-ro', 'ro', 'S-\u00A5', false, { jN: '\\', uN: '\\', uS: '|', keN: '\u00A5' }],
 ];
 
 /**
@@ -75,6 +79,8 @@ export const JIS_TO_US_MAPPINGS: readonly JisToUsMapping[] = CONV_ENTRIES.map((e
 		jisShift: ov?.jS ?? meta.jisShift ?? '',
 		usNormal: ov?.uN ?? meta.usNormal,
 		usShift: ov?.uS ?? meta.usShift ?? '',
+		keNormalExpr: ov?.keN,
+		keShiftExpr: ov?.keS,
 	};
 });
 

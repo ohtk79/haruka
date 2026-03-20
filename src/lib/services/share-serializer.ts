@@ -1,7 +1,7 @@
 // =============================================================================
 // Share Serializer — EditorState ↔ ShareData 変換サービス
 // =============================================================================
-// Depends on: models/types.ts, models/share-types.ts, models/constants.ts, templates/index.ts
+// Depends on: models/types.ts, models/share-types.ts, models/constants.ts, templates/index.ts, models/action-handler.ts
 // Tested by: tests/unit/share-serializer.test.ts
 // Called from: services/share-url.ts, routes/+page.svelte
 
@@ -17,6 +17,7 @@ import type {
 	HoldAction,
 	TapHoldVariant
 } from '$lib/models/types';
+import { visitAction } from '$lib/models/action-handler';
 import type {
 	ShareAction,
 	ShareActionKey,
@@ -58,33 +59,27 @@ const SHORT_TO_VARIANT: Record<ShareTapHoldVariant, TapHoldVariant> = {
  * KeyAction を短縮形の ShareAction に変換する
  */
 export function toShareAction(action: KeyAction): ShareAction {
-	switch (action.type) {
-		case 'key': {
-			const result: ShareActionKey = { t: 'k', v: action.value };
-			if (action.modifiers && action.modifiers.length > 0) {
-				result.m = [...action.modifiers];
+	return visitAction<ShareAction>(action, {
+		key: (a) => {
+			const result: ShareActionKey = { t: 'k', v: a.value };
+			if (a.modifiers && a.modifiers.length > 0) {
+				result.m = [...a.modifiers];
 			}
 			return result;
-		}
-		case 'transparent':
-			return { t: '_' };
-		case 'no-op':
-			return { t: 'x' };
-		case 'layer-while-held':
-			return { t: 'lh', l: action.layer };
-		case 'layer-switch':
-			return { t: 'ls', l: action.layer };
-		case 'tap-hold': {
-			return {
-				t: 'th',
-				vr: VARIANT_TO_SHORT[action.variant],
-				to: action.tapTimeout,
-				ho: action.holdTimeout,
-				ta: toShareAction(action.tapAction) as ShareTapAction,
-				ha: toShareAction(action.holdAction) as ShareHoldAction
-			};
-		}
-	}
+		},
+		transparent: () => ({ t: '_' as const }),
+		'no-op': () => ({ t: 'x' as const }),
+		'layer-while-held': (a) => ({ t: 'lh' as const, l: a.layer }),
+		'layer-switch': (a) => ({ t: 'ls' as const, l: a.layer }),
+		'tap-hold': (a) => ({
+			t: 'th' as const,
+			vr: VARIANT_TO_SHORT[a.variant],
+			to: a.tapTimeout,
+			ho: a.holdTimeout,
+			ta: toShareAction(a.tapAction) as ShareTapAction,
+			ha: toShareAction(a.holdAction) as ShareHoldAction
+		})
+	});
 }
 
 // =============================================================================

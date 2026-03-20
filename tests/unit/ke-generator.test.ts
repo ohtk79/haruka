@@ -595,8 +595,9 @@ describe('ke-generator: JIS→US KE rules', () => {
 		expect(yenRule!.manipulators[0].to).toEqual([
 			{ key_code: 'international3', modifiers: ['left_shift'] }
 		]);
+		// keNormalExpr='¥' → international3
 		expect(yenRule!.manipulators[1].to).toEqual([
-			{ key_code: 'international1' }
+			{ key_code: 'international3' }
 		]);
 
 		// roキー
@@ -605,8 +606,9 @@ describe('ke-generator: JIS→US KE rules', () => {
 		expect(roRule!.manipulators[0].to).toEqual([
 			{ key_code: 'international3', modifiers: ['left_shift'] }
 		]);
+		// keNormalExpr='¥' → international3
 		expect(roRule!.manipulators[1].to).toEqual([
-			{ key_code: 'international1' }
+			{ key_code: 'international3' }
 		]);
 	});
 
@@ -743,5 +745,432 @@ describe('ke-generator: JIS→US KE rules', () => {
 		expect(physicalIdx).toBeGreaterThanOrEqual(0);
 		expect(remapIdx).toBeGreaterThanOrEqual(0);
 		expect(physicalIdx).toBeLessThan(remapIdx);
+	});
+
+	// =========================================================================
+	// 非ベースレイヤー JIS→US 変換テスト (017-fix-jis-us-nonbase-layer)
+	// =========================================================================
+
+	// KE-NB-001: 非ベースレイヤーに変換対象キー（単純リマップ）→ 2-manipulator + variable_if
+	it('generates 2-manipulator JIS→US rule with variable_if for non-base layer remap', () => {
+		const state = createState({ jisToUsRemap: true });
+		const layer1 = createTransparentLayer('layer-1');
+		layer1.actions.set('KeyA', { type: 'key', value: '2' });
+		state.layers.push(layer1);
+
+		const result = generateKeJson(state);
+
+		// 非ベースレイヤーに JIS→US ルールが生成される
+		const rule = result.json.rules.find(
+			(r) => r.description === 'haruka: layer-1 - jus-2 (a)'
+		);
+		expect(rule).toBeDefined();
+		expect(rule!.manipulators).toHaveLength(2);
+
+		// Shift manipulator
+		const shiftM = rule!.manipulators[0];
+		expect(shiftM.from.key_code).toBe('a');
+		expect(shiftM.from.modifiers?.mandatory).toEqual(['shift']);
+		expect(shiftM.from.modifiers?.optional).toEqual(['any']);
+		expect(shiftM.to).toEqual([{ key_code: 'open_bracket' }]);
+		expect(shiftM.conditions).toEqual([
+			{ type: 'variable_if', name: 'haruka_layer', value: 'layer-1' }
+		]);
+
+		// Normal manipulator
+		const normalM = rule!.manipulators[1];
+		expect(normalM.from.key_code).toBe('a');
+		expect(normalM.from.modifiers?.optional).toEqual(['any']);
+		expect(normalM.from.modifiers?.mandatory).toBeUndefined();
+		expect(normalM.to).toEqual([{ key_code: '2' }]);
+		expect(normalM.conditions).toEqual([
+			{ type: 'variable_if', name: 'haruka_layer', value: 'layer-1' }
+		]);
+	});
+
+	// KE-NB-002: 非ベースレイヤーの transparent → ルール生成なし
+	it('does not generate rules for transparent keys in non-base layer', () => {
+		const state = createState({ jisToUsRemap: true });
+		const layer1 = createTransparentLayer('layer-1');
+		// 全キー transparent のまま
+		state.layers.push(layer1);
+
+		const result = generateKeJson(state);
+		const layer1Rules = result.json.rules.filter((r) =>
+			r.description.startsWith('haruka: layer-1')
+		);
+		expect(layer1Rules).toHaveLength(0);
+	});
+
+	// KE-NB-003: 非ベースレイヤーの物理位置ベースのデフォルトキー → JIS→US + variable_if
+	it('generates JIS→US rule for default key at JIS→US physical position in non-base layer', () => {
+		const state = createState({ jisToUsRemap: true });
+		const layer1 = createTransparentLayer('layer-1');
+		// Digit2 に物理位置と同じ '2' を明示設定
+		layer1.actions.set('Digit2', { type: 'key', value: '2' });
+		state.layers.push(layer1);
+
+		const result = generateKeJson(state);
+
+		const rule = result.json.rules.find(
+			(r) => r.description === 'haruka: layer-1 - jus-2 (2)'
+		);
+		expect(rule).toBeDefined();
+		expect(rule!.manipulators).toHaveLength(2);
+		expect(rule!.manipulators[0].from.key_code).toBe('2');
+		expect(rule!.manipulators[0].conditions).toEqual([
+			{ type: 'variable_if', name: 'haruka_layer', value: 'layer-1' }
+		]);
+	});
+
+	// KE-NB-004: jisToUsRemap=false → 非ベースレイヤーでも JIS→US ルールなし
+	it('does not generate JIS→US rules in non-base layer when jisToUsRemap=false', () => {
+		const state = createState({ jisToUsRemap: false });
+		const layer1 = createTransparentLayer('layer-1');
+		layer1.actions.set('KeyA', { type: 'key', value: '2' });
+		state.layers.push(layer1);
+
+		const result = generateKeJson(state);
+
+		// JIS→US ルールは一切なし
+		const jusRules = result.json.rules.filter((r) =>
+			r.description.includes('jus-')
+		);
+		expect(jusRules).toHaveLength(0);
+
+		// 通常の非ベースレイヤールール（1-manipulator）として生成
+		const rule = findRule(result.json.rules, 'layer-1', 'a');
+		expect(rule).toBeDefined();
+		expect(rule!.manipulators).toHaveLength(1);
+		expect(rule!.manipulators[0].to).toEqual([{ key_code: '2' }]);
+	});
+
+	// KE-NB-005: 非ベースレイヤーに変換対象外キー → JIS→US 変換なし
+	it('does not generate JIS→US rule for non-target key in non-base layer', () => {
+		const state = createState({ jisToUsRemap: true });
+		const layer1 = createTransparentLayer('layer-1');
+		layer1.actions.set('KeyA', { type: 'key', value: 'b' });
+		state.layers.push(layer1);
+
+		const result = generateKeJson(state);
+
+		// 通常の 1-manipulator ルール
+		const rule = findRule(result.json.rules, 'layer-1', 'a');
+		expect(rule).toBeDefined();
+		expect(rule!.manipulators).toHaveLength(1);
+		expect(rule!.manipulators[0].to).toEqual([{ key_code: 'b' }]);
+	});
+
+	// KE-NB-006: 非ベースレイヤーに修飾キー付き変換対象キー → JIS→US 変換なし
+	it('does not generate JIS→US rule for key with modifiers in non-base layer', () => {
+		const state = createState({ jisToUsRemap: true });
+		const layer1 = createTransparentLayer('layer-1');
+		layer1.actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lctl'] });
+		state.layers.push(layer1);
+
+		const result = generateKeJson(state);
+
+		// 1-manipulator ルール（Ctrl+2）
+		const rule = findRule(result.json.rules, 'layer-1', 'a');
+		expect(rule).toBeDefined();
+		expect(rule!.manipulators).toHaveLength(1);
+		expect(rule!.manipulators[0].to).toEqual([
+			{ key_code: '2', modifiers: ['left_control'] }
+		]);
+	});
+
+	// KE-NB-007: 複数レイヤーに異なる変換対象キー → 各レイヤーに正しいルール
+	it('generates correct JIS→US rules for multiple non-base layers', () => {
+		const state = createState({ jisToUsRemap: true });
+		const layer1 = createTransparentLayer('layer-1');
+		layer1.actions.set('KeyA', { type: 'key', value: '2' });
+		const layer2 = createTransparentLayer('layer-2');
+		layer2.actions.set('KeyB', { type: 'key', value: '6' });
+		state.layers.push(layer1, layer2);
+
+		const result = generateKeJson(state);
+
+		// Layer-1 に jus-2 ルール
+		const rule1 = result.json.rules.find(
+			(r) => r.description === 'haruka: layer-1 - jus-2 (a)'
+		);
+		expect(rule1).toBeDefined();
+		expect(rule1!.manipulators[0].conditions).toEqual([
+			{ type: 'variable_if', name: 'haruka_layer', value: 'layer-1' }
+		]);
+
+		// Layer-2 に jus-6 ルール
+		const rule2 = result.json.rules.find(
+			(r) => r.description === 'haruka: layer-2 - jus-6 (b)'
+		);
+		expect(rule2).toBeDefined();
+		expect(rule2!.manipulators[0].conditions).toEqual([
+			{ type: 'variable_if', name: 'haruka_layer', value: 'layer-2' }
+		]);
+	});
+
+	// =========================================================================
+	// Shift 修飾 + JIS→US 変換テスト (018-fix-shift-jis-us-remap)
+	// =========================================================================
+
+	describe('JIS→US remap with Shift modifier', () => {
+
+		// KE-JR-SHIFT-001: ベースレイヤー Shift+2 → open_bracket（カテゴリ B）
+		it('generates single manipulator with open_bracket for Shift+2 on base layer', () => {
+			const state = createState({ jisToUsRemap: true });
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lsft'] });
+
+			const result = generateKeJson(state);
+
+			// buildJisUsRules 内で Shift 付きルールとして生成される
+			const rule = result.json.rules.find(
+				(r) => r.description.includes('jus-2') && r.description.includes('(a)')
+			);
+			expect(rule).toBeDefined();
+			// 単一 manipulator（fork/2-manipulator ではない）
+			expect(rule!.manipulators).toHaveLength(1);
+			expect(rule!.manipulators[0].to).toEqual([{ key_code: 'open_bracket' }]);
+		});
+
+		// KE-JR-SHIFT-002: ベースレイヤー Shift+grv → equal_sign + left_shift（カテゴリ A）
+		it('generates single manipulator with equal_sign and left_shift for Shift+grv on base layer', () => {
+			const state = createState({ jisToUsRemap: true });
+			state.layers[0].actions.set('KeyA', { type: 'key', value: 'grv', modifiers: ['lsft'] });
+
+			const result = generateKeJson(state);
+
+			const rule = result.json.rules.find(
+				(r) => r.description.includes('jus-grv') && r.description.includes('(a)')
+			);
+			expect(rule).toBeDefined();
+			expect(rule!.manipulators).toHaveLength(1);
+			expect(rule!.manipulators[0].to).toEqual([
+				{ key_code: 'equal_sign', modifiers: ['left_shift'] }
+			]);
+		});
+
+		// KE-JR-SHIFT-003: ベースレイヤー Shift+Ctrl+2 → open_bracket + left_control
+		it('generates single manipulator with open_bracket and left_control for Shift+Ctrl+2 on base layer', () => {
+			const state = createState({ jisToUsRemap: true });
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lsft', 'lctl'] });
+
+			const result = generateKeJson(state);
+
+			const rule = result.json.rules.find(
+				(r) => r.description.includes('jus-2') && r.description.includes('(a)')
+			);
+			expect(rule).toBeDefined();
+			expect(rule!.manipulators).toHaveLength(1);
+			expect(rule!.manipulators[0].to).toEqual([
+				{ key_code: 'open_bracket', modifiers: ['left_control'] }
+			]);
+		});
+
+		// KE-JR-SHIFT-004: ベースレイヤー rsft+; → quote（右 Shift、カテゴリ B）
+		it('generates single manipulator with quote for rsft+semicolon on base layer', () => {
+			const state = createState({ jisToUsRemap: true });
+			state.layers[0].actions.set('KeyA', { type: 'key', value: ';', modifiers: ['rsft'] });
+
+			const result = generateKeJson(state);
+
+			const rule = result.json.rules.find(
+				(r) => r.description.includes('jus-scl') && r.description.includes('(a)')
+			);
+			expect(rule).toBeDefined();
+			expect(rule!.manipulators).toHaveLength(1);
+			expect(rule!.manipulators[0].to).toEqual([{ key_code: 'quote' }]);
+		});
+
+		// KE-JR-SHIFT-005: Ctrl のみ（Shift なし）→ JIS→US 変換なし
+		it('does not apply JIS→US conversion for Ctrl-only modifier on base layer', () => {
+			const state = createState({ jisToUsRemap: true });
+			state.layers[0].actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lctl'] });
+
+			const result = generateKeJson(state);
+
+			// jus ルールは生成されない
+			const jusRule = result.json.rules.find(
+				(r) => r.description.includes('jus-') && r.description.includes('(a)')
+			);
+			expect(jusRule).toBeUndefined();
+
+			// 通常の修飾キー付きルール
+			const rule = findRule(result.json.rules, BASE_LAYER_NAME, 'a');
+			expect(rule).toBeDefined();
+			expect(rule!.manipulators).toHaveLength(1);
+			expect(rule!.manipulators[0].to).toEqual([
+				{ key_code: '2', modifiers: ['left_control'] }
+			]);
+		});
+
+		// KE-NB-SHIFT-001: 非ベースレイヤー Shift+2 → open_bracket + variable_if
+		it('generates single manipulator with open_bracket for Shift+2 on non-base layer', () => {
+			const state = createState({ jisToUsRemap: true });
+			const layer1 = createTransparentLayer('layer-1');
+			layer1.actions.set('KeyA', { type: 'key', value: '2', modifiers: ['lsft'] });
+			state.layers.push(layer1);
+
+			const result = generateKeJson(state);
+
+			const rule = result.json.rules.find(
+				(r) => r.description.includes('jus-2') && r.description.includes('(a)')
+			);
+			expect(rule).toBeDefined();
+			// 単一 manipulator（2-manipulator ではない）
+			expect(rule!.manipulators).toHaveLength(1);
+			expect(rule!.manipulators[0].to).toEqual([{ key_code: 'open_bracket' }]);
+			expect(rule!.manipulators[0].conditions).toEqual([
+				{ type: 'variable_if', name: 'haruka_layer', value: 'layer-1' }
+			]);
+		});
+
+		// KE-NB-SHIFT-002: 非ベースレイヤー Shift+Ctrl+grv → equal_sign + left_shift + left_control + variable_if
+		it('generates single manipulator with equal_sign, left_shift and left_control for Shift+Ctrl+grv on non-base layer', () => {
+			const state = createState({ jisToUsRemap: true });
+			const layer1 = createTransparentLayer('layer-1');
+			layer1.actions.set('KeyA', { type: 'key', value: 'grv', modifiers: ['lsft', 'lctl'] });
+			state.layers.push(layer1);
+
+			const result = generateKeJson(state);
+
+			const rule = result.json.rules.find(
+				(r) => r.description.includes('jus-grv') && r.description.includes('(a)')
+			);
+			expect(rule).toBeDefined();
+			expect(rule!.manipulators).toHaveLength(1);
+			expect(rule!.manipulators[0].to).toEqual([
+				{ key_code: 'equal_sign', modifiers: ['left_shift', 'left_control'] }
+			]);
+			expect(rule!.manipulators[0].conditions).toEqual([
+				{ type: 'variable_if', name: 'haruka_layer', value: 'layer-1' }
+			]);
+		});
+	});
+
+	// =========================================================================
+	// KE international キーマッピング修正テスト (019-fix-ke-intl-key)
+	// =========================================================================
+
+	describe('KE international key mapping fix', () => {
+
+		// KE-INTL-001: jus-bsl 通常押下の to = { key_code: 'international3' }
+		it('jus-bsl normal produces to with international3', () => {
+			const state = createState({ jisToUsRemap: true });
+			const result = generateKeJson(state);
+
+			const rule = findJisUsRule(result.json.rules, 'jus-bsl');
+			expect(rule).toBeDefined();
+			expect(rule!.manipulators[1].to).toEqual([
+				{ key_code: 'international3' }
+			]);
+		});
+
+		// KE-INTL-002: jus-yen 通常押下の to = { key_code: 'international3' }
+		it('jus-yen normal produces to with international3', () => {
+			const state = createState({ jisToUsRemap: true });
+			const result = generateKeJson(state);
+
+			const rule = findJisUsRule(result.json.rules, 'jus-yen');
+			expect(rule).toBeDefined();
+			expect(rule!.manipulators[1].to).toEqual([
+				{ key_code: 'international3' }
+			]);
+		});
+
+		// KE-INTL-003: jus-ro 通常押下の to = { key_code: 'international3' }
+		it('jus-ro normal produces to with international3', () => {
+			const state = createState({ jisToUsRemap: true });
+			const result = generateKeJson(state);
+
+			const rule = findJisUsRule(result.json.rules, 'jus-ro');
+			expect(rule).toBeDefined();
+			expect(rule!.manipulators[1].to).toEqual([
+				{ key_code: 'international3' }
+			]);
+		});
+
+		// KE-INTL-004: jus-min Shift 押下の to = { key_code: 'international1' } (修飾なし)
+		it('jus-min shift produces to with international1 without modifiers', () => {
+			const state = createState({ jisToUsRemap: true });
+			const result = generateKeJson(state);
+
+			const rule = findJisUsRule(result.json.rules, 'jus-min');
+			expect(rule).toBeDefined();
+			expect(rule!.manipulators[0].to).toEqual([
+				{ key_code: 'international1' }
+			]);
+		});
+
+		// KE-INTL-005: 非影響 12 キーの to が修正前と同一
+		it('non-affected 12 keys retain their original to mappings', () => {
+			const state = createState({ jisToUsRemap: true });
+			const result = generateKeJson(state);
+
+			const affectedAliases = new Set(['jus-bsl', 'jus-yen', 'jus-ro', 'jus-min']);
+
+			for (const mapping of JIS_TO_US_MAPPINGS) {
+				if (affectedAliases.has(mapping.aliasName)) continue;
+
+				const rule = findJisUsRule(result.json.rules, mapping.aliasName);
+				expect(rule).toBeDefined();
+
+				// normalExpr/shiftExpr に KE オーバーライドがないキーは従来と同じ
+				const normalTo = rule!.manipulators[1].to;
+				const shiftTo = rule!.manipulators[0].to;
+				expect(normalTo).toBeDefined();
+				expect(shiftTo).toBeDefined();
+			}
+		});
+
+		// KE-INTL-005b: jus-bsl/jus-yen/jus-ro の Shift 出力が修正で影響を受けない
+		it('jus-bsl/jus-yen/jus-ro shift output is unaffected by the fix', () => {
+			const state = createState({ jisToUsRemap: true });
+			const result = generateKeJson(state);
+
+			for (const alias of ['jus-bsl', 'jus-yen', 'jus-ro']) {
+				const rule = findJisUsRule(result.json.rules, alias);
+				expect(rule).toBeDefined();
+				expect(rule!.manipulators[0].to).toEqual([
+					{ key_code: 'international3', modifiers: ['left_shift'] }
+				]);
+			}
+		});
+
+		// KE-INTL-005c: jus-min の通常出力が修正で影響を受けない
+		it('jus-min normal output is unaffected by the fix', () => {
+			const state = createState({ jisToUsRemap: true });
+			const result = generateKeJson(state);
+
+			const rule = findJisUsRule(result.json.rules, 'jus-min');
+			expect(rule).toBeDefined();
+			expect(rule!.manipulators[1].to).toEqual([
+				{ key_code: 'hyphen' }
+			]);
+		});
+
+		// 非ベースレイヤーでも KE オーバーライドが適用される
+		it('KE override applies in non-base layer JIS→US rules', () => {
+			const state = createState({ jisToUsRemap: true });
+			const layer1 = createTransparentLayer('layer-1');
+			// layer-1 で KeyA → ro（jus-ro の normalExpr と同じ値）をリマップ
+			layer1.actions.set('KeyA', { type: 'key', value: 'ro' });
+			state.layers.push(layer1);
+
+			const result = generateKeJson(state);
+
+			// 非ベースレイヤーの jus-ro ルール
+			const rule = result.json.rules.find(
+				(r) => r.description === 'haruka: layer-1 - jus-ro (a)'
+			);
+			expect(rule).toBeDefined();
+			// 通常押下は keNormalExpr='¥' → international3
+			expect(rule!.manipulators[1].to).toEqual([
+				{ key_code: 'international3' }
+			]);
+			// Shift 押下は keShiftExpr 未設定 → shiftExpr='S-¥' → international3 + left_shift
+			expect(rule!.manipulators[0].to).toEqual([
+				{ key_code: 'international3', modifiers: ['left_shift'] }
+			]);
+		});
 	});
 });

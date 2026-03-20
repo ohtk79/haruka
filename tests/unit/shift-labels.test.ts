@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SHIFT_LABELS } from '$lib/models/shift-labels';
+import { SHIFT_LABELS } from '$lib/models/key-metadata';
 import { JIS_109_TEMPLATE } from '$lib/templates/jis109';
 
 describe('SHIFT_LABELS', () => {

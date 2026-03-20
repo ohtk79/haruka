@@ -5,7 +5,7 @@ import { ANSI_104_TEMPLATE } from '$lib/templates/ansi104';
 import { APPLE_MAGIC_JIS_TEMPLATE } from '$lib/templates/apple-magic-jis';
 import { APPLE_MAGIC_US_TEMPLATE } from '$lib/templates/apple-magic-us';
 import { JIS_TO_US_MAPPINGS } from '$lib/models/jis-us-map';
-import { KANATA_KEY_LABEL_MAP, US_KEY_LABELS } from '$lib/utils/kanata-keys';
+import { KANATA_KEY_LABEL_MAP, US_KEY_LABELS } from '$lib/models/key-metadata';
 
 /** S- プレフィックスを除去して実キー名を抽出 */
 function extractKeyName(expr: string): string {

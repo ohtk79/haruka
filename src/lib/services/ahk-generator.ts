@@ -2,7 +2,7 @@
 // AutoHotkey v2 Generator — Generates .ahk text from EditorState
 // =============================================================================
 // Depends on: models/types.ts, models/export-format.ts, models/ahk-keycode-map.ts,
-//             models/constants.ts, models/jis-us-map.ts
+//             models/constants.ts, models/jis-us-map.ts, models/action-handler.ts
 // Tested by: tests/unit/ahk-generator.test.ts
 // Called from: stores/editor.svelte.ts
 
@@ -23,6 +23,7 @@ import type {
 	PhysicalKey,
 	TapAction
 } from '$lib/models/types';
+import { visitAction, visitTapAction, visitHoldAction } from '$lib/models/action-handler';
 import { JIS_TO_US_MAPPINGS, JIS_TO_US_MAP_BY_KEY, JIS_TO_US_MAP_BY_KANATA_NAME } from '$lib/models/jis-us-map';
 import * as m from '$lib/paraglide/messages';
 
@@ -150,31 +151,28 @@ function collectActionIssues(
 	keyId: string,
 	action: KeyAction
 ): void {
-	switch (action.type) {
-		case 'key': {
-			if (!hasAhkMapping(action.value)) {
-				issues.push(createTargetKeyIssue(layerName, keyId, action.value));
+	visitAction(action, {
+		key: (a) => {
+			if (!hasAhkMapping(a.value)) {
+				issues.push(createTargetKeyIssue(layerName, keyId, a.value));
 			}
-			if (action.modifiers) {
-				for (const modifier of action.modifiers) {
+			if (a.modifiers) {
+				for (const modifier of a.modifiers) {
 					if (!hasAhkMapping(modifier)) {
 						issues.push(createTargetKeyIssue(layerName, keyId, modifier));
 					}
 				}
 			}
-			return;
+		},
+		transparent: () => {},
+		'no-op': () => {},
+		'layer-switch': () => {},
+		'layer-while-held': () => {},
+		'tap-hold': (a) => {
+			collectActionIssues(issues, layerName, keyId, a.tapAction);
+			collectActionIssues(issues, layerName, keyId, a.holdAction);
 		}
-		case 'transparent':
-		case 'no-op':
-		case 'layer-switch':
-		case 'layer-while-held':
-			return;
-		case 'tap-hold': {
-			collectActionIssues(issues, layerName, keyId, action.tapAction);
-			collectActionIssues(issues, layerName, keyId, action.holdAction);
-			return;
-		}
-	}
+	});
 }
 
 function collectConversionNotices(state: EditorState): ExportConversionNotice[] {
@@ -298,24 +296,19 @@ function appendBlock(lines: string[], hotkeyToken: string, bodyLines: string[]):
 }
 
 function buildActionBody(action: KeyAction, waitToken: string): string[] {
-	switch (action.type) {
-		case 'key':
-			return [buildSendCommand(action)];
-		case 'transparent':
-			return ['return'];
-		case 'no-op':
-			return ['return'];
-		case 'layer-switch':
-			return ['global currentLayer', `currentLayer := "${action.layer}"`];
-		case 'layer-while-held':
-			return [
-				'global currentLayer',
-				`currentLayer := "${action.layer}"`,
-				`KeyWait("${waitToken}")`,
-				`currentLayer := "${BASE_LAYER_NAME}"`
-			];
-		case 'tap-hold': {
-			const normalizedAction = normalizeTapHoldAction(action);
+	return visitAction(action, {
+		key: (a) => [buildSendCommand(a)],
+		transparent: () => ['return'],
+		'no-op': () => ['return'],
+		'layer-switch': (a) => ['global currentLayer', `currentLayer := "${a.layer}"`],
+		'layer-while-held': (a) => [
+			'global currentLayer',
+			`currentLayer := "${a.layer}"`,
+			`KeyWait("${waitToken}")`,
+			`currentLayer := "${BASE_LAYER_NAME}"`
+		],
+		'tap-hold': (a) => {
+			const normalizedAction = normalizeTapHoldAction(a);
 			const timeout = formatTapHoldSeconds(normalizedAction);
 			return [
 				'global currentLayer',
@@ -329,34 +322,28 @@ function buildActionBody(action: KeyAction, waitToken: string): string[] {
 				'}'
 			];
 		}
-	}
+	});
 }
 
 function buildTapActionBody(action: TapAction, waitToken: string): string[] {
-	switch (action.type) {
-		case 'key':
-			return [buildSendCommand(action)];
-		case 'transparent':
-		case 'no-op':
-			return ['return'];
-	}
+	return visitTapAction(action, {
+		key: (a) => [buildSendCommand(a)],
+		transparent: () => ['return'],
+		'no-op': () => ['return']
+	});
 }
 
 function buildHoldActionBody(action: HoldAction, waitToken: string): string[] {
-	switch (action.type) {
-		case 'key':
-			return [buildSendCommand(action)];
-		case 'no-op':
-			return ['return'];
-		case 'layer-switch':
-			return [`currentLayer := "${action.layer}"`];
-		case 'layer-while-held':
-			return [
-				`currentLayer := "${action.layer}"`,
-				`KeyWait("${waitToken}")`,
-				`currentLayer := "${BASE_LAYER_NAME}"`
-			];
-	}
+	return visitHoldAction(action, {
+		key: (a) => [buildSendCommand(a)],
+		'no-op': () => ['return'],
+		'layer-switch': (a) => [`currentLayer := "${a.layer}"`],
+		'layer-while-held': (a) => [
+			`currentLayer := "${a.layer}"`,
+			`KeyWait("${waitToken}")`,
+			`currentLayer := "${BASE_LAYER_NAME}"`
+		]
+	});
 }
 
 function buildSendCommand(action: KeyActionKey): string {

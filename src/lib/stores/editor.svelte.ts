@@ -90,12 +90,15 @@ export class EditorStore {
 		return generateAhk({ template, layers, jisToUsRemap, tappingTerm, selectedKeyId: null, activeLayerIndex: 0 });
 	});
 	readonly ahkText: string = $derived(this.ahkResult.text);
+	// 全ターゲットのバリデーション結果を一括キャッシュ（重複呼び出し排除）
+	private readonly _kbdValidationMap = $derived.by(() => {
+		if (!isFormatStaticallySupported(this.template, 'kbd')) return null;
+		const state: EditorState = { template: this.template, layers: this.layers, jisToUsRemap: this.jisToUsRemap, tappingTerm: this.tappingTerm, selectedKeyId: null, activeLayerIndex: 0 };
+		const targets: KbdTargetOs[] = ['windows', 'macos', 'linux'];
+		return new Map(targets.map(t => [t, validateKbdExport(state, t)]));
+	});
 	readonly kbdValidation = $derived.by(() => {
-		if (!isFormatStaticallySupported(this.template, 'kbd')) return { valid: true, unsupportedActions: [] };
-		return validateKbdExport(
-			{ template: this.template, layers: this.layers, jisToUsRemap: this.jisToUsRemap, tappingTerm: this.tappingTerm, selectedKeyId: null, activeLayerIndex: 0 },
-			this.kbdTarget
-		);
+		return this._kbdValidationMap?.get(this.kbdTarget) ?? { valid: true, unsupportedActions: [] };
 	});
 	readonly formatStatuses: ExportFormatStatus[] = $derived.by(() =>
 		resolveExportFormatStatuses({
@@ -107,20 +110,20 @@ export class EditorStore {
 	);
 	readonly kbdTargetStatuses: KbdTargetExportStatus[] = $derived.by(() => {
 		const targets: KbdTargetOs[] = ['windows', 'macos', 'linux'];
-		const supported = isFormatStaticallySupported(this.template, 'kbd');
-		if (!supported) {
+		const validationMap = this._kbdValidationMap;
+		if (!validationMap) {
 			const reason = this.template.keOnly
 				? m.header_appleKarabinerOnly()
 				: m.export_templateFormatUnsupported({ format: m.header_exportKbd() });
 			return targets.map(target => ({ target, available: false, disabledReason: reason, notice: null }));
 		}
-		const state: EditorState = { template: this.template, layers: this.layers, jisToUsRemap: this.jisToUsRemap, tappingTerm: this.tappingTerm, selectedKeyId: null, activeLayerIndex: 0 };
 		const hasKanaKey = this.template.keys.some(k => k.kanataName === 'jp-kana');
 		return targets.map(target => {
-			const validation = validateKbdExport(state, target);
-			if (!validation.valid) {
-				const first = validation.unsupportedActions[0];
-				return { target, available: false, disabledReason: `${first.actionId}: ${first.reason}`, notice: null };
+			const validation = validationMap.get(target);
+			if (!validation || !validation.valid) {
+				const first = validation?.unsupportedActions[0];
+				const reason = first ? `${first.actionId}: ${first.reason}` : '';
+				return { target, available: false, disabledReason: reason, notice: null };
 			}
 			const notice = (target === 'windows' && hasKanaKey) ? m.export_kbdWinterceptNotice() : null;
 			return { target, available: true, disabledReason: null, notice };
@@ -128,6 +131,26 @@ export class EditorStore {
 	});
 	readonly kbdNotice: string | null = $derived(
 		this.kbdTargetStatuses.find(s => s.target === this.kbdTarget)?.notice ?? null
+	);
+
+	/** 選択中のキーの PhysicalKey (未選択時は null) */
+	readonly selectedKey: PhysicalKey | null = $derived(
+		this.selectedKeyId
+			? this.template.keys.find((k) => k.id === this.selectedKeyId) ?? null
+			: null
+	);
+
+	/** 選択中のキーに対する現在のアクション */
+	readonly currentAction: KeyAction | undefined = $derived(
+		this.selectedKeyId ? this.activeLayer?.actions.get(this.selectedKeyId) : undefined
+	);
+
+	/** US ラベルを使用するか (テンプレートが US またはユーザーが JIS→US 変換を有効にしている) */
+	readonly useUsLabels: boolean = $derived(this.jisToUsRemap || this.template.usLayout === true);
+
+	/** 現在のテンプレートの kanataName 一覧 (KeyPicker フィルタ用) */
+	readonly templateKanataNames: Set<string> = $derived(
+		new Set(this.template.keys.map((k) => k.kanataName).filter((name): name is string => name !== undefined))
 	);
 
 	constructor(template: LayoutTemplate, layers?: Layer[]) {

@@ -252,3 +252,58 @@ export function getCategoryLabel(id: string): string {
 	};
 	return labels[id]?.() ?? id;
 }
+
+// =============================================================================
+// Shift Labels — キーの通常/Shift文字ペア (旧 shift-labels.ts)
+// =============================================================================
+
+export interface ShiftLabelEntry {
+	jisNormal: string;
+	jisShift: string | null;
+	usNormal: string;
+	usShift: string | null;
+}
+
+export const SHIFT_LABELS: ReadonlyMap<string, ShiftLabelEntry> = new Map<string, ShiftLabelEntry>(
+	Array.from(KEY_REGISTRY.values())
+		.filter((meta) => meta.physicalKeyId !== '')
+		.map((meta) => [
+			meta.physicalKeyId,
+			{ jisNormal: meta.jisNormal, jisShift: meta.jisShift, usNormal: meta.usNormal, usShift: meta.usShift },
+		])
+);
+
+// =============================================================================
+// Kanata Key Catalog — KeyPicker 用カテゴリ・ラベル (旧 kanata-keys.ts)
+// =============================================================================
+
+export interface KanataKeyInfo {
+	name: string;
+	label: string;
+}
+
+export interface KanataKeyCategory {
+	id: string;
+	label: string;
+	keys: KanataKeyInfo[];
+}
+
+export const KANATA_KEY_CATEGORIES: KanataKeyCategory[] = CATEGORY_ORDER.map((cat) => ({
+	id: cat.id,
+	label: getCategoryLabel(cat.id),
+	keys: Array.from(KEY_REGISTRY.values())
+		.filter((meta) => meta.category === cat.id)
+		.map((meta) => ({ name: meta.kanataName, label: meta.displayLabel })),
+}));
+
+export const ALL_KANATA_KEYS: KanataKeyInfo[] = KANATA_KEY_CATEGORIES.flatMap((c) => c.keys);
+
+export const KANATA_KEY_LABEL_MAP: Map<string, string> = new Map(
+	ALL_KANATA_KEYS.map((k) => [k.name, k.label])
+);
+
+export const US_KEY_LABELS: ReadonlyMap<string, string> = new Map([
+	['grv', '`'], ['=', '='], ['[', '['], [']', ']'], ["'", "'"], ['\\', '\\'], ['¥', '\\'],
+	['ro', 'Ro'], ['henk', 'Henkan'], ['mhnk', 'Muhenkan'], ['eisu', 'LANG2'], ['kana', 'LANG1'],
+	['lang1', 'LANG1'], ['lang2', 'LANG2'], ['jp-kana', 'KANA'],
+]);

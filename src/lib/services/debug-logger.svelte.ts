@@ -1,11 +1,12 @@
 // =============================================================================
 // Debug Logger Service — Timestamped event capture for debug panel
 // =============================================================================
-// Depends on: models/types.ts
+// Depends on: models/types.ts, models/action-handler.ts
 // Tested by: N/A (UI-only debug tool)
 // Called from: stores/editor.svelte.ts, components/common/DebugPanel.svelte, routes/+page.svelte
 
 import type { KeyAction } from '$lib/models/types';
+import { visitAction } from '$lib/models/action-handler';
 import * as m from '$lib/paraglide/messages';
 import { getLocale } from '$lib/paraglide/runtime.js';
 
@@ -135,24 +136,17 @@ class DebugLogger {
 }
 
 function formatAction(action: KeyAction): string {
-	switch (action.type) {
-		case 'key': {
-			const mods = action.modifiers && action.modifiers.length > 0 ? `[${action.modifiers.join('+')}] ` : '';
-			return `key(${mods}"${action.value}")`;
-		}
-		case 'transparent':
-			return 'transparent (_)';
-		case 'no-op':
-			return 'no-op (XX)';
-		case 'layer-while-held':
-			return `layer-while-held("${action.layer}")`;
-		case 'layer-switch':
-			return `layer-switch("${action.layer}")`;
-		case 'tap-hold':
-			return `tap-hold(${action.variant}, tap=${formatAction(action.tapAction)}, hold=${formatAction(action.holdAction)}, ${action.tapTimeout}/${action.holdTimeout}ms)`;
-		default:
-			return JSON.stringify(action);
-	}
+	return visitAction(action, {
+		key: (a) => {
+			const mods = a.modifiers && a.modifiers.length > 0 ? `[${a.modifiers.join('+')}] ` : '';
+			return `key(${mods}"${a.value}")`;
+		},
+		transparent: () => 'transparent (_)',
+		'no-op': () => 'no-op (XX)',
+		'layer-while-held': (a) => `layer-while-held("${a.layer}")`,
+		'layer-switch': (a) => `layer-switch("${a.layer}")`,
+		'tap-hold': (a) => `tap-hold(${a.variant}, tap=${formatAction(a.tapAction)}, hold=${formatAction(a.holdAction)}, ${a.tapTimeout}/${a.holdTimeout}ms)`
+	});
 }
 
 /** Singleton instance */

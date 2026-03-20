@@ -4,7 +4,7 @@
   Used by: components/panels/ActionPanel.svelte, components/panels/TapHoldForm.svelte
 -->
 <script lang="ts">
-	import { KANATA_KEY_CATEGORIES, US_KEY_LABELS } from '$lib/utils/kanata-keys';
+	import { KANATA_KEY_CATEGORIES, US_KEY_LABELS } from '$lib/models/key-metadata';
 	import { ALL_TEMPLATE_KANATA_NAMES } from '$lib/templates';
 	import * as m from '$lib/paraglide/messages';
 
