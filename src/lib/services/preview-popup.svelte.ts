@@ -33,7 +33,8 @@ export function openPreviewPopup(
 	kbdValidation: KbdValidationResult,
 	kbdTarget: KbdTargetOs = 'windows',
 	onTargetChange?: (target: KbdTargetOs) => void,
-	kbdNotice?: string | null
+	kbdNotice?: string | null,
+	keUnifiedJsonText: string = ''
 ): void {
 	previewFormatStatuses = formatStatuses;
 	previewKbdValidation = kbdValidation;
@@ -43,7 +44,7 @@ export function openPreviewPopup(
 
 	if (previewWindow && !previewWindow.closed) {
 		previewWindow.focus();
-		updatePopupContent(kbdText, keJsonText, ahkText, formatStatuses, kbdValidation);
+		updatePopupContent(kbdText, keJsonText, ahkText, formatStatuses, kbdValidation, undefined, keUnifiedJsonText);
 		return;
 	}
 
@@ -80,6 +81,7 @@ export function openPreviewPopup(
 		<div class="tabs">
 			<button class="tab" data-tab="kbd">${m.preview_tabKbd()}</button>
 			<button class="tab" data-tab="json">${m.preview_tabJson()}</button>
+			<button class="tab" data-tab="json-unified">${m.preview_tabJsonUnified()}</button>
 			<button class="tab" data-tab="ahk">${m.preview_tabAhk()}</button>
 		</div>
 		<div id="target-bar" class="target-bar">
@@ -93,6 +95,7 @@ export function openPreviewPopup(
 		<div id="status-panel" class="status"></div>
 		<div id="kbd-panel" class="panel"><pre id="kbd-content"></pre></div>
 		<div id="json-panel" class="panel"><pre id="json-content"></pre></div>
+		<div id="json-unified-panel" class="panel"><pre id="json-unified-content"></pre></div>
 		<div id="ahk-panel" class="panel"><pre id="ahk-content"></pre></div>
 	`;
 	w.document.querySelectorAll<HTMLButtonElement>('.tab').forEach((button) => {
@@ -115,7 +118,7 @@ export function openPreviewPopup(
 		});
 	});
 
-	updatePopupContent(kbdText, keJsonText, ahkText, formatStatuses, kbdValidation);
+	updatePopupContent(kbdText, keJsonText, ahkText, formatStatuses, kbdValidation, undefined, keUnifiedJsonText);
 }
 
 export function updatePopupContent(
@@ -124,7 +127,8 @@ export function updatePopupContent(
 	ahkText: string,
 	formatStatuses: ExportFormatStatus[],
 	kbdValidation?: KbdValidationResult,
-	kbdNotice?: string | null
+	kbdNotice?: string | null,
+	keUnifiedJsonText: string = ''
 ): void {
 	if (!previewWindow || previewWindow.closed) return;
 	previewFormatStatuses = formatStatuses;
@@ -133,9 +137,11 @@ export function updatePopupContent(
 	previewPopupTab = resolvePreviewTab(formatStatuses, previewPopupTab);
 	const kbdEl = previewWindow.document.getElementById('kbd-content');
 	const jsonEl = previewWindow.document.getElementById('json-content');
+	const jsonUnifiedEl = previewWindow.document.getElementById('json-unified-content');
 	const ahkEl = previewWindow.document.getElementById('ahk-content');
 	if (kbdEl) kbdEl.textContent = kbdText;
 	if (jsonEl) jsonEl.textContent = keJsonText;
+	if (jsonUnifiedEl) jsonUnifiedEl.textContent = keUnifiedJsonText;
 	if (ahkEl) ahkEl.textContent = ahkText;
 	applyPopupState();
 }
@@ -161,7 +167,7 @@ function applyPopupState(): void {
 		button.title = tabStatus?.disabledReason ?? '';
 	});
 
-	for (const tab of ['kbd', 'json', 'ahk'] as const) {
+	for (const tab of ['kbd', 'json', 'json-unified', 'ahk'] as const) {
 		previewWindow.document.getElementById(`${tab}-panel`)?.classList.toggle('active', tab === activeTab);
 	}
 

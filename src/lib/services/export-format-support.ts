@@ -17,13 +17,20 @@ import * as m from '$lib/paraglide/messages';
 
 /** テンプレートの静的対応形式を解決する */
 export function getSupportedFormats(template: LayoutTemplate): readonly ExportFormatId[] {
+	let formats: ExportFormatId[];
 	if (template.supportedFormats && template.supportedFormats.length > 0) {
-		return template.supportedFormats;
+		formats = [...template.supportedFormats];
+	} else if (template.keOnly) {
+		formats = ['json'];
+	} else {
+		formats = ['kbd', 'json'];
 	}
-	if (template.keOnly) {
-		return ['json'];
+	// json サポート時は json-unified を自動追加
+	if (formats.includes('json') && !formats.includes('json-unified')) {
+		const jsonIndex = formats.indexOf('json');
+		formats.splice(jsonIndex + 1, 0, 'json-unified');
 	}
-	return ['kbd', 'json'];
+	return formats;
 }
 
 /** 指定 format がテンプレートで静的対応しているか判定する */
@@ -38,6 +45,7 @@ interface ResolveExportFormatStatusesInput {
 	template: LayoutTemplate;
 	kbdText: string;
 	keJsonText: string;
+	keUnifiedJsonText: string;
 	ahkResult: AhkGeneratorResult;
 }
 
@@ -46,6 +54,7 @@ export function resolveExportFormatStatuses({
 	template,
 	kbdText,
 	keJsonText,
+	keUnifiedJsonText,
 	ahkResult
 }: ResolveExportFormatStatusesInput): ExportFormatStatus[] {
 	const supportedFormats = new Set(getSupportedFormats(template));
@@ -59,7 +68,9 @@ export function resolveExportFormatStatuses({
 				? kbdText.length > 0
 				: format === 'json'
 					? keJsonText.length > 0
-					: ahkResult.text.length > 0 && issues.length === 0;
+					: format === 'json-unified'
+						? keUnifiedJsonText.length > 0
+						: ahkResult.text.length > 0 && issues.length === 0;
 
 		const available = staticallySupported && dynamicallyAvailable && issues.length === 0;
 
@@ -94,6 +105,8 @@ function getFormatLabel(format: ExportFormatId): string {
 			return m.header_exportKbd();
 		case 'json':
 			return m.header_exportJson();
+		case 'json-unified':
+			return m.header_exportJsonUnified();
 		case 'ahk':
 			return m.header_exportAhk();
 	}

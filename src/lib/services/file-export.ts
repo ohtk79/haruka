@@ -88,7 +88,8 @@ export async function handleExport(
 	format: ExportFormat,
 	kbdText: string,
 	keJsonText: string,
-	ahkText: string = ''
+	ahkText: string = '',
+	keUnifiedJsonText: string = ''
 ): Promise<void> {
 	switch (format) {
 		case 'kbd':
@@ -96,6 +97,9 @@ export async function handleExport(
 			break;
 		case 'json':
 			await exportKeJson(keJsonText, 'haruka.json');
+			break;
+		case 'json-unified':
+			await exportKeJson(keUnifiedJsonText, 'haruka.json');
 			break;
 		case 'ahk':
 			await exportAhk(ahkText, 'haruka.ahk');

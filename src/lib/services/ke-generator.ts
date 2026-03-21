@@ -259,6 +259,20 @@ export function generateKeJson(state: EditorState): KeGeneratorResult {
 	};
 }
 
+/**
+ * 分割ルール形式の KeGeneratorResult を統合ルール形式に変換する。
+ * 全マニピュレーターを1ルールにフラット化し、title に "(unified)" を付与する。
+ */
+export function toUnifiedKeJson(result: KeGeneratorResult, templateName: string): KeComplexModifications {
+	return {
+		title: `haruka: ${templateName} (unified)`,
+		rules: [{
+			description: 'haruka: all mappings',
+			manipulators: result.json.rules.flatMap(rule => rule.manipulators)
+		}]
+	};
+}
+
 // =============================================================================
 // Internal Helpers
 // =============================================================================

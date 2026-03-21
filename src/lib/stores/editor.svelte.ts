@@ -21,7 +21,7 @@ import type {
 import { isTopLevelAction } from '$lib/models/types';
 import type { AhkGeneratorResult, ExportFormatStatus } from '$lib/models/export-format';
 import { generateKbd } from '$lib/services/kbd-generator';
-import { generateKeJson, type KeGeneratorResult } from '$lib/services/ke-generator';
+import { generateKeJson, toUnifiedKeJson, type KeGeneratorResult } from '$lib/services/ke-generator';
 import { generateAhk } from '$lib/services/ahk-generator';
 import {
 	isFormatStaticallySupported,
@@ -85,6 +85,10 @@ export class EditorStore {
 		return generateKeJson({ template, layers, jisToUsRemap, tappingTerm, selectedKeyId: null, activeLayerIndex: 0 });
 	});
 	readonly keJsonText: string = $derived(JSON.stringify(this.keResult.json, null, 2));
+	readonly keUnifiedJsonText: string = $derived.by(() => {
+		const unified = toUnifiedKeJson(this.keResult, this.template.name);
+		return JSON.stringify(unified, null, 2);
+	});
 	readonly ahkResult: AhkGeneratorResult = $derived.by(() => {
 		const { template, layers, jisToUsRemap, tappingTerm } = this;
 		return generateAhk({ template, layers, jisToUsRemap, tappingTerm, selectedKeyId: null, activeLayerIndex: 0 });
@@ -105,6 +109,7 @@ export class EditorStore {
 			template: this.template,
 			kbdText: this.kbdText,
 			keJsonText: this.keJsonText,
+			keUnifiedJsonText: this.keUnifiedJsonText,
 			ahkResult: this.ahkResult
 		})
 	);

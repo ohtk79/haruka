@@ -6,7 +6,7 @@
 // Called from: models/types.ts, services/, stores/, components/, routes/
 
 /** haruka が扱う出力形式の一覧 */
-export const EXPORT_FORMAT_IDS = ['kbd', 'json', 'ahk'] as const;
+export const EXPORT_FORMAT_IDS = ['kbd', 'json', 'json-unified', 'ahk'] as const;
 
 /** 出力形式の識別子 */
 export type ExportFormatId = (typeof EXPORT_FORMAT_IDS)[number];

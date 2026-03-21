@@ -29,14 +29,14 @@ const FULL_TEMPLATE: LayoutTemplate = {
 };
 
 describe('export-format-support', () => {
-	it('legacy template は kbd/json を互換補完する', () => {
-		expect(getSupportedFormats(LEGACY_TEMPLATE)).toEqual(['kbd', 'json']);
+	it('legacy template は kbd/json/json-unified を互換補完する', () => {
+		expect(getSupportedFormats(LEGACY_TEMPLATE)).toEqual(['kbd', 'json', 'json-unified']);
 		expect(isFormatStaticallySupported(LEGACY_TEMPLATE, 'kbd')).toBe(true);
 		expect(isFormatStaticallySupported(LEGACY_TEMPLATE, 'ahk')).toBe(false);
 	});
 
 	it('supportedFormats を優先して判定する', () => {
-		expect(getSupportedFormats(KE_ONLY_TEMPLATE)).toEqual(['json']);
+		expect(getSupportedFormats(KE_ONLY_TEMPLATE)).toEqual(['json', 'json-unified']);
 		expect(isFormatStaticallySupported(KE_ONLY_TEMPLATE, 'kbd')).toBe(false);
 	});
 
@@ -45,6 +45,7 @@ describe('export-format-support', () => {
 			template: FULL_TEMPLATE,
 			kbdText: 'kbd',
 			keJsonText: '{}',
+			keUnifiedJsonText: '{}',
 			ahkResult: {
 				text: '',
 				issues: [
@@ -67,6 +68,7 @@ describe('export-format-support', () => {
 			template: FULL_TEMPLATE,
 			kbdText: 'kbd',
 			keJsonText: '{}',
+			keUnifiedJsonText: '{}',
 			ahkResult: {
 				...EMPTY_AHK_GENERATOR_RESULT,
 				text: '; ahk',

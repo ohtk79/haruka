@@ -133,6 +133,9 @@ export const URL_LENGTH_ERROR = 8000;
 /** URL ハッシュフラグメントのプレフィックス */
 export const URL_HASH_PREFIX = 'config=';
 
+/** 共有 URL 埋め込み設定の localStorage キー */
+export const EMBED_SHARE_URL_STORAGE_KEY = 'kanata-web-config:embed-share-url';
+
 // =============================================================================
 // Karabiner-Elements (KE) 関連定数
 // =============================================================================

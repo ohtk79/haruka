@@ -1,6 +1,6 @@
 <!--
   Header — App header bar with template selection and file operations
-  Props: onexport, onnewfile, onpreview, onshare, formatStatuses, persistenceError, shareAvailable
+  Props: onexport, onnewfile, onpreview, onshare, formatStatuses, persistenceError, shareAvailable, embedShareUrl, onToggleEmbed
   Used by: routes/+page.svelte
 -->
 <script lang="ts">
@@ -21,7 +21,9 @@
 		formatStatuses,
 		kbdTargetStatuses,
 		persistenceError = null,
-		shareAvailable = true
+		shareAvailable = true,
+		embedShareUrl = true,
+		onToggleEmbed
 	}: {
 		onexport: (format: ExportFormatId, kbdTarget?: KbdTargetOs) => void;
 		onnewfile: (templateId: string) => void;
@@ -31,11 +33,14 @@
 		kbdTargetStatuses: KbdTargetExportStatus[];
 		persistenceError: string | null;
 		shareAvailable?: boolean;
+		embedShareUrl?: boolean;
+		onToggleEmbed?: (value: boolean) => void;
 	} = $props();
 
 	/** .kbd 以外のエクスポート項目 */
 	const nonKbdExportItems: { format: ExportFormatId; label: string }[] = [
 		{ format: 'json', label: m.header_exportJson() },
+		{ format: 'json-unified', label: m.header_exportJsonUnified() },
 		{ format: 'ahk', label: m.header_exportAhk() }
 	];
 
@@ -216,6 +221,18 @@
 							{/if}
 						</button>
 					{/each}
+					<div class="border-t border-gray-200 px-4 py-2">
+						<label class="flex items-center gap-2 text-sm {shareAvailable ? 'text-gray-700' : 'text-gray-400 cursor-not-allowed'}">
+							<input
+								type="checkbox"
+								checked={embedShareUrl && shareAvailable}
+								disabled={!shareAvailable}
+								data-testid="checkbox-embed-share-url"
+								onchange={(e) => onToggleEmbed?.(e.currentTarget.checked)}
+							/>
+							{m.header_embedShareUrl()}
+						</label>
+					</div>
 				</div>
 			{/if}
 		</div>

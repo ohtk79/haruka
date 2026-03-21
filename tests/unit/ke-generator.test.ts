@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generateKeJson } from '$lib/services/ke-generator';
-import type { KeManipulator, KeRule } from '$lib/services/ke-generator';
+import { generateKeJson, toUnifiedKeJson } from '$lib/services/ke-generator';
+import type { KeManipulator, KeRule, KeGeneratorResult } from '$lib/services/ke-generator';
 import { JIS_109_TEMPLATE } from '$lib/templates/jis109';
 import { ANSI_104_TEMPLATE } from '$lib/templates/ansi104';
 import type { EditorState, Layer, KeyAction } from '$lib/models/types';
@@ -1172,5 +1172,78 @@ describe('ke-generator: JIS→US KE rules', () => {
 				{ key_code: 'international3', modifiers: ['left_shift'] }
 			]);
 		});
+	});
+});
+
+// =============================================================================
+// toUnifiedKeJson Tests
+// =============================================================================
+
+describe('toUnifiedKeJson', () => {
+	it('空ルールの場合、manipulators が空の1ルールを返す', () => {
+		const result: KeGeneratorResult = {
+			json: { title: 'haruka: JIS 109', rules: [] },
+			skippedMediaKeys: []
+		};
+		const unified = toUnifiedKeJson(result, 'JIS 109');
+		expect(unified.title).toBe('haruka: JIS 109 (unified)');
+		expect(unified.rules).toHaveLength(1);
+		expect(unified.rules[0].description).toBe('haruka: all mappings');
+		expect(unified.rules[0].manipulators).toHaveLength(0);
+	});
+
+	it('単一ルールの場合、そのマニピュレーターがそのまま1ルールに入る', () => {
+		const manipulator: KeManipulator = {
+			type: 'basic',
+			from: { key_code: 'a' },
+			to: [{ key_code: 'b' }]
+		};
+		const result: KeGeneratorResult = {
+			json: {
+				title: 'haruka: JIS 109',
+				rules: [{ description: 'haruka: layer-0 - a', manipulators: [manipulator] }]
+			},
+			skippedMediaKeys: []
+		};
+		const unified = toUnifiedKeJson(result, 'JIS 109');
+		expect(unified.rules).toHaveLength(1);
+		expect(unified.rules[0].manipulators).toHaveLength(1);
+		expect(unified.rules[0].manipulators[0]).toEqual(manipulator);
+	});
+
+	it('複数ルールの場合、全マニピュレーターが順序通りフラット化される', () => {
+		const m1: KeManipulator = { type: 'basic', from: { key_code: 'a' }, to: [{ key_code: 'b' }] };
+		const m2: KeManipulator = { type: 'basic', from: { key_code: 'c' }, to: [{ key_code: 'd' }] };
+		const m3: KeManipulator = { type: 'basic', from: { key_code: 'e' }, to: [{ key_code: 'f' }] };
+		const result: KeGeneratorResult = {
+			json: {
+				title: 'haruka: JIS 109',
+				rules: [
+					{ description: 'rule1', manipulators: [m1, m2] },
+					{ description: 'rule2', manipulators: [m3] }
+				]
+			},
+			skippedMediaKeys: []
+		};
+		const unified = toUnifiedKeJson(result, 'JIS 109');
+		expect(unified.rules).toHaveLength(1);
+		expect(unified.rules[0].manipulators).toHaveLength(3);
+		expect(unified.rules[0].manipulators).toEqual([m1, m2, m3]);
+	});
+
+	it('JIS→US変換ありの generateKeJson 結果を統合ルール化できる', () => {
+		const state = createState({ jisToUsRemap: true });
+		const splitResult = generateKeJson(state);
+		const unified = toUnifiedKeJson(splitResult, 'JIS 109');
+
+		expect(unified.title).toBe('haruka: JIS 109 (unified)');
+		expect(unified.rules).toHaveLength(1);
+		expect(unified.rules[0].description).toBe('haruka: all mappings');
+
+		// 分割形式の全マニピュレーター合計と一致
+		const splitManipulatorCount = splitResult.json.rules.reduce(
+			(sum, r) => sum + r.manipulators.length, 0
+		);
+		expect(unified.rules[0].manipulators).toHaveLength(splitManipulatorCount);
 	});
 });

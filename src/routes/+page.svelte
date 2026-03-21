@@ -15,6 +15,8 @@
 	import DebugPanel from '$lib/components/common/DebugPanel.svelte';
 	import { checkLayerReferences } from '$lib/services/validation';
 	import { handleExport } from '$lib/services/file-export';
+	import { embedShareUrlComment } from '$lib/services/export-share-url';
+	import { EMBED_SHARE_URL_STORAGE_KEY } from '$lib/models/constants';
 	import { openPreviewPopup, updatePopupContent, closePreviewPopup } from '$lib/services/preview-popup.svelte';
 	import { loadState, debouncedSave, clearState, getSavedTemplateId, PersistenceError } from '$lib/stores/persistence';
 	import { debugLog } from '$lib/services/debug-logger.svelte';
@@ -32,6 +34,7 @@
 	const dialog = new DialogState();
 	const shareAvailable = isCompressionStreamAvailable();
 	let persistenceError = $state<string | null>(null);
+	let embedShareUrl = $state(true);
 	let kbdHighlightMode = $state<'selected' | 'changed' | null>(null);
 	let settingsTabActive = $state(false);
 	let pendingImportState: Partial<import('$lib/models/types').EditorState> | null = null;
@@ -41,6 +44,9 @@
 		debugLog.logRestoreState(!!saved);
 		if (saved) store.restoreState(saved);
 		debugLog.log('App mounted', `layers=${store.layers.length}, template=${store.template.id}`);
+		// 共有 URL 埋め込み設定の復元
+		const storedEmbed = localStorage.getItem(EMBED_SHARE_URL_STORAGE_KEY);
+		if (storedEmbed !== null) embedShareUrl = JSON.parse(storedEmbed) === true;
 		try {
 			const result = await checkUrlHash(getTemplateName(store.template.id));
 			if (result) {
@@ -57,7 +63,7 @@
 		try { debouncedSave(state); persistenceError = null; }
 		catch (err) { if (err instanceof PersistenceError) persistenceError = err.message; }
 	});
-	$effect(() => { updatePopupContent(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdNotice); });
+	$effect(() => { updatePopupContent(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdNotice, store.keUnifiedJsonText); });
 	onDestroy(() => closePreviewPopup());
 
 	function handleKeySelect(keyId: string) {
@@ -87,16 +93,38 @@
 		}
 	}
 
-	function handleExportAction(format: ExportFormat, kbdTarget?: KbdTargetOs) {
+	async function handleExportAction(format: ExportFormat, kbdTarget?: KbdTargetOs) {
+		// 形式テキスト取得（同期）
+		let text: string;
 		if (format === 'kbd' && kbdTarget) {
-			handleExport(format, store.generateKbdForTarget(kbdTarget), store.keJsonText, store.ahkText);
+			text = store.generateKbdForTarget(kbdTarget);
+		} else if (format === 'json') {
+			text = store.keJsonText;
+		} else if (format === 'json-unified') {
+			text = store.keUnifiedJsonText;
+		} else if (format === 'ahk') {
+			text = store.ahkText;
 		} else {
-			handleExport(format, store.kbdText, store.keJsonText, store.ahkText);
+			text = store.kbdText;
 		}
+
+		// 共有 URL 埋め込み（非同期）
+		if (embedShareUrl && shareAvailable) {
+			const shareUrl = await generateShareUrlFromState(store.getState());
+			text = embedShareUrlComment(text, format, shareUrl);
+		}
+
+		// format に応じた export 関数呼び出し
+		await handleExport(format, text, text, text, text);
+	}
+
+	function handleToggleEmbed(value: boolean) {
+		embedShareUrl = value;
+		localStorage.setItem(EMBED_SHARE_URL_STORAGE_KEY, JSON.stringify(value));
 	}
 
 	function handlePreview() {
-		openPreviewPopup(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdTarget, (t) => store.setKbdTarget(t), store.kbdNotice);
+		openPreviewPopup(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdTarget, (t) => store.setKbdTarget(t), store.kbdNotice, store.keUnifiedJsonText);
 	}
 
 	function handleNewFile(templateId: string) {
@@ -127,6 +155,8 @@
 	kbdTargetStatuses={store.kbdTargetStatuses}
 	{persistenceError}
 	{shareAvailable}
+	{embedShareUrl}
+	onToggleEmbed={handleToggleEmbed}
 />
 
 <main class="mx-auto max-w-screen-2xl p-4">
