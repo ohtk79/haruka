@@ -1,7 +1,7 @@
 {
   "name": "haruka",
   "private": false,
-  "version": "0.2.5",
+  "version": "1.0.0",
   "type": "module",
   "packageManager": "pnpm@10.32.1",
   "scripts": {
