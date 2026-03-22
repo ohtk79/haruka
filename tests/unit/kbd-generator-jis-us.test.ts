@@ -810,4 +810,159 @@ describe('kbd-generator with JIS→US remap', () => {
 			expect(layer1Section).toContain('C-S-=');
 		});
 	});
+
+	// =========================================================================
+	// Windows ターゲット JIS→US 変換テスト (022-fix-win-key-ro-yen)
+	// =========================================================================
+
+	describe('Windows target JIS→US remap', () => {
+		// T008: Windows + JIS→US ON で 4 エイリアスの出力値を検証
+		describe('US1: defalias alias values', () => {
+			const result = generateKbd(createState(true), 'windows');
+
+			it('should output jus-min as fork with arbitrary-code 226 for JIS layout', () => {
+				const aliasLine = result.split('\n').find((l) => l.includes('jus-min '));
+				expect(aliasLine).toBeDefined();
+				expect(aliasLine).toContain('jus-min');
+				// Windows JIS: normalExpr='-', shiftExpr='(multi lsft (arbitrary-code 226))' → fork
+				expect(aliasLine).toContain('(fork - (multi lsft (arbitrary-code 226)) (lsft rsft))');
+			});
+
+			it('should output jus-bsl as fork with arbitrary-code 226/220', () => {
+				const aliasLine = result.split('\n').find((l) => l.includes('jus-bsl '));
+				expect(aliasLine).toBeDefined();
+				// Windows JIS: normalExpr='(arbitrary-code 226)', shiftExpr='(multi lsft (arbitrary-code 220))'
+				expect(aliasLine).toContain('(fork (arbitrary-code 226) (multi lsft (arbitrary-code 220)) (lsft rsft))');
+			});
+
+			it('should output jus-yen with arbitrary-code expressions', () => {
+				const aliasLine = result.split('\n').find((l) => l.includes('jus-yen '));
+				expect(aliasLine).toBeDefined();
+				// Windows JIS: normalExpr='(arbitrary-code 226)', shiftExpr='(multi lsft (arbitrary-code 220))'
+				expect(aliasLine).toContain('(fork (arbitrary-code 226) (multi lsft (arbitrary-code 220)) (lsft rsft))');
+			});
+
+			it('should output jus-ro with arbitrary-code expressions', () => {
+				const aliasLine = result.split('\n').find((l) => l.includes('jus-ro '));
+				expect(aliasLine).toBeDefined();
+				// Windows JIS: normalExpr='(arbitrary-code 226)', shiftExpr='(multi lsft (arbitrary-code 220))'
+				expect(aliasLine).toContain('(fork (arbitrary-code 226) (multi lsft (arbitrary-code 220)) (lsft rsft))');
+			});
+		});
+
+		// T009: Windows + JIS→US ON で defalias セクションに ro / ¥ が出力キーコードとして含まれない
+		describe('US1: defalias must not contain unmapped keycodes', () => {
+			it('should not contain ro or ¥ as output keycodes in defalias', () => {
+				const result = generateKbd(createState(true), 'windows');
+				const defaliasStart = result.indexOf('(defalias');
+				const defaliasEnd = result.indexOf(')', defaliasStart + '(defalias'.length);
+				const defaliasSection = result.slice(defaliasStart, defaliasEnd + 1);
+				// 出力キーコードとしての ro / ¥ がないことを確認（スペース区切りで単語マッチ）
+				expect(defaliasSection).not.toMatch(/\bro\b/);
+				expect(defaliasSection).not.toMatch(/\b¥\b/);
+			});
+		});
+
+		// T014: Windows ターゲットの defsrc に ro と ¥ が含まれる
+		describe('US4: defsrc contains physical key names', () => {
+			it('should contain ro and ¥ in defsrc for Windows target', () => {
+				const result = generateKbd(createState(true), 'windows');
+				const defsrcMatch = result.match(/\(defsrc[^)]+\)/);
+				expect(defsrcMatch).not.toBeNull();
+				const defsrcSection = defsrcMatch![0];
+				expect(defsrcSection).toMatch(/\bro\b/);
+				expect(defsrcSection).toContain('¥');
+			});
+		});
+
+		// T020: 非ベースレイヤーで Shift + ro が Windows で S-\ として出力される
+		describe('US3: non-base layer Shift+ro/¥ for Windows', () => {
+			function createStateWithLayer1(jisToUsRemap: boolean): EditorState {
+				const state = createState(jisToUsRemap);
+				const layer1Actions = new Map<string, KeyAction>();
+				for (const key of JIS_109_TEMPLATE.keys) {
+					layer1Actions.set(key.id, { type: 'transparent' });
+				}
+				state.layers.push({ name: 'layer-1', actions: layer1Actions });
+				return state;
+			}
+
+			function getLayerSection(result: string, layerName: string): string {
+				const lines = result.split('\n');
+				const start = lines.findIndex((l) => l.includes(`(deflayer ${layerName}`));
+				if (start === -1) return '';
+				const end = lines.findIndex((l, i) => i > start && l.trim() === ')');
+				return lines.slice(start, end + 1).join('\n');
+			}
+
+			it('should output (multi lsft (arbitrary-code 220)) when non-base layer has Shift+ro on Windows', () => {
+				const state = createStateWithLayer1(true);
+				const roKey = JIS_109_TEMPLATE.keys.find((k) => k.kanataName === 'ro');
+				expect(roKey).toBeDefined();
+				state.layers[1].actions.set(roKey!.id, { type: 'key', value: 'ro', modifiers: ['lsft'] });
+				const result = generateKbd(state, 'windows');
+				const layer1Section = getLayerSection(result, 'layer-1');
+				expect(layer1Section).toContain('(multi lsft (arbitrary-code 220))');
+				expect(layer1Section).not.toMatch(/\bS-ro\b/);
+			});
+
+			// T021: 非ベースレイヤーで Shift + ¥ が Windows で arbitrary-code 式として出力される
+			it('should output (multi lsft (arbitrary-code 220)) when non-base layer has Shift+¥ on Windows', () => {
+				const state = createStateWithLayer1(true);
+				const yenKey = JIS_109_TEMPLATE.keys.find((k) => k.kanataName === '¥');
+				expect(yenKey).toBeDefined();
+				state.layers[1].actions.set(yenKey!.id, { type: 'key', value: '¥', modifiers: ['lsft'] });
+				const result = generateKbd(state, 'windows');
+				const layer1Section = getLayerSection(result, 'layer-1');
+				expect(layer1Section).toContain('(multi lsft (arbitrary-code 220))');
+				expect(layer1Section).not.toMatch(/\bS-¥\b/);
+			});
+		});
+	});
+
+	// =========================================================================
+	// macOS ターゲット回帰テスト (022-fix-win-key-ro-yen)
+	// =========================================================================
+
+	describe('macOS target JIS→US remap regression', () => {
+		// T015: macOS ターゲットの defsrc に ro と ¥ が含まれる
+		it('should contain ro and ¥ in defsrc for macOS target', () => {
+			const result = generateKbd(createState(true));
+			const defsrcMatch = result.match(/\(defsrc[^)]+\)/);
+			expect(defsrcMatch).not.toBeNull();
+			const defsrcSection = defsrcMatch![0];
+			expect(defsrcSection).toMatch(/\bro\b/);
+			expect(defsrcSection).toContain('¥');
+		});
+
+		// T017: macOS ターゲットで jus-yen が従来出力と同一
+		it('should output jus-yen as "(fork ro S-¥ (lsft rsft))" on macOS', () => {
+			const result = generateKbd(createState(true));
+			const aliasLine = result.split('\n').find((l) => l.includes('jus-yen '));
+			expect(aliasLine).toBeDefined();
+			expect(aliasLine).toContain('(fork ro S-¥ (lsft rsft))');
+		});
+
+		// T018: macOS ターゲットで jus-ro, jus-bsl, jus-min が従来出力と同一
+		it('should output jus-ro as "(fork ro S-¥ (lsft rsft))" on macOS', () => {
+			const result = generateKbd(createState(true));
+			const aliasLine = result.split('\n').find((l) => l.includes('jus-ro '));
+			expect(aliasLine).toBeDefined();
+			expect(aliasLine).toContain('(fork ro S-¥ (lsft rsft))');
+		});
+
+		it('should output jus-bsl as "(fork ro ¥ (lsft rsft))" on macOS', () => {
+			const result = generateKbd(createState(true));
+			const aliasLine = result.split('\n').find((l) => l.includes('jus-bsl '));
+			expect(aliasLine).toBeDefined();
+			expect(aliasLine).toContain('(fork ro ¥ (lsft rsft))');
+		});
+
+		it('should output jus-min as "(fork - ro (lsft rsft))" on macOS', () => {
+			const result = generateKbd(createState(true));
+			const aliasLine = result.split('\n').find((l) => l.includes('jus-min '));
+			expect(aliasLine).toBeDefined();
+			expect(aliasLine).toContain('(fork - ro (lsft rsft))');
+		});
+	});
 });

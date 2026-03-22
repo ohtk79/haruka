@@ -7,7 +7,7 @@
 
 import type { EditorState, KeyAction, Layer, PhysicalKey, KbdTargetOs } from '$lib/models/types';
 import { visitAction } from '$lib/models/action-handler';
-import { JIS_TO_US_MAPPINGS, JIS_TO_US_MAP_BY_KEY, JIS_TO_US_MAP_BY_KANATA_NAME } from '$lib/models/jis-us-map';
+import { JIS_TO_US_MAPPINGS, JIS_TO_US_MAP_BY_KEY, JIS_TO_US_MAP_BY_KANATA_NAME, resolveNormalExpr, resolveShiftExpr } from '$lib/models/jis-us-map';
 import { BASE_LAYER_NAME, KANATA_CHORD_PREFIX, MODIFIER_SORT_ORDER } from '$lib/models/constants';
 import { resolveKbdAction } from '$lib/models/kbd-target-registry';
 
@@ -79,7 +79,7 @@ export function generateKbd(state: EditorState, target: KbdTargetOs = 'macos'): 
 	lines.push('');
 
 	// Collect aliases (G-4)
-	const jisUsAliases = state.jisToUsRemap ? collectJisUsAliases() : [];
+	const jisUsAliases = state.jisToUsRemap ? collectJisUsAliases(target) : [];
 	const aliases = collectAliases(state.layers, kanataKeys, state.tappingTerm, target, state.jisToUsRemap);
 	const allAliases = [...jisUsAliases, ...aliases];
 
@@ -130,12 +130,19 @@ export function generateKbd(state: EditorState, target: KbdTargetOs = 'macos'): 
 						const shiftMapping = JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value);
 						if (shiftMapping) {
 							const otherMods = removeShiftModifiers(action.modifiers!);
-							const shiftExpr = shiftMapping.shiftExpr;
+							const shiftExpr = resolveShiftExpr(shiftMapping, target);
 							if (shiftExpr.startsWith('S-')) {
 								// カテゴリ A/C: S- 接頭辞を分解して lsft を effectiveMods に追加
 								const bareKey = shiftExpr.slice(2);
 								const effectiveMods = [...otherMods, 'lsft'];
 								shiftJisUsText = modifiersToKanata(effectiveMods, bareKey, target);
+							} else if (shiftExpr.startsWith('(')) {
+								// S式 (arbitrary-code 等): Shift 込みの完全な式
+								if (otherMods.length === 0) {
+									shiftJisUsText = shiftExpr;
+								} else {
+									shiftJisUsText = `(multi ${otherMods.join(' ')} ${shiftExpr})`;
+								}
 							} else {
 								// カテゴリ B: 素キー。Shift は吸収済み
 								if (otherMods.length === 0) {
@@ -192,24 +199,29 @@ interface Alias {
  * カテゴリ B: 素キーshiftExpr → unshift で Shift 一時解除
  * カテゴリ C: needsReleaseKey=false → 単純fork（変更なし）
  */
-function collectJisUsAliases(): Alias[] {
+function collectJisUsAliases(target: KbdTargetOs): Alias[] {
 	return JIS_TO_US_MAPPINGS.map((m) => {
+		const normalExpr = resolveNormalExpr(m, target);
+		const shiftExpr = resolveShiftExpr(m, target);
 		let value: string;
-		if (!m.needsReleaseKey) {
-			// カテゴリC: jus-yen, jus-ro — 単純な fork（変更なし）
-			value = `(fork ${m.normalExpr} ${m.shiftExpr} (lsft rsft))`;
-		} else if (m.shiftExpr.startsWith('S-')) {
+		// S式（arbitrary-code 等）を含む場合は Category A/B ロジックが非対応のため
+		// Category C 相当の単純 fork にフォールバック
+		const hasSExpr = normalExpr.startsWith('(') || shiftExpr.startsWith('(');
+		if (hasSExpr || !m.needsReleaseKey) {
+			// カテゴリC / S式: 単純な fork
+			value = `(fork ${normalExpr} ${shiftExpr} (lsft rsft))`;
+		} else if (shiftExpr.startsWith('S-')) {
 			// カテゴリA: S-付き — release-key除去、素キー出力
-			const bareKey = m.shiftExpr.slice(2);
-			if (bareKey === m.normalExpr) {
+			const bareKey = shiftExpr.slice(2);
+			if (bareKey === normalExpr) {
 				// jus-lbr, jus-rbr: normalExprと一致 → fork不要
-				value = m.normalExpr;
+				value = normalExpr;
 			} else {
-				value = `(fork ${m.normalExpr} ${bareKey} (lsft rsft))`;
+				value = `(fork ${normalExpr} ${bareKey} (lsft rsft))`;
 			}
 		} else {
 			// カテゴリB: 素キー — unshiftでShift一時解除（自動復元）
-			value = `(fork ${m.normalExpr} (unshift ${m.shiftExpr}) (lsft rsft))`;
+			value = `(fork ${normalExpr} (unshift ${shiftExpr}) (lsft rsft))`;
 		}
 		return { name: m.aliasName, value };
 	});
@@ -266,11 +278,15 @@ function calculateColumnWidths(rows: PhysicalKey[][], layers: Layer[], jisToUsRe
 						const shiftMapping = JIS_TO_US_MAP_BY_KANATA_NAME.get(action.value);
 						if (shiftMapping) {
 							const otherMods = removeShiftModifiers(action.modifiers!);
-							const shiftExpr = shiftMapping.shiftExpr;
+							const shiftExpr = resolveShiftExpr(shiftMapping, target);
 							let shiftText: string;
 							if (shiftExpr.startsWith('S-')) {
 								const bareKey = shiftExpr.slice(2);
 								shiftText = modifiersToKanata([...otherMods, 'lsft'], bareKey, target);
+							} else if (shiftExpr.startsWith('(')) {
+								shiftText = otherMods.length === 0
+									? shiftExpr
+									: `(multi ${otherMods.join(' ')} ${shiftExpr})`;
 							} else {
 								shiftText = otherMods.length === 0
 									? shiftExpr

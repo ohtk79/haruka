@@ -1,4 +1,4 @@
 # Public Release Source Metadata
 
-- Public version: 0.4.0
-- Generated at (UTC): 2026-03-21T01:02:53Z
+- Public version: 1.0.0
+- Generated at (UTC): 2026-03-22T12:04:35Z

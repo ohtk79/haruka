@@ -9,6 +9,7 @@
 // unified KEY_REGISTRY, with explicit overrides where semantics differ.
 
 import { KEY_REGISTRY } from './key-metadata';
+import type { KbdTargetOs } from './types';
 
 /**
  * JIS→US変換対象キー1つ分の定義
@@ -38,10 +39,14 @@ export interface JisToUsMapping {
 	keNormalExpr?: string;
 	/** KE用のShift出力式（省略時は shiftExpr を使用） */
 	keShiftExpr?: string;
+	/** Windows ターゲット用の通常出力式（省略時は normalExpr を使用） */
+	winNormalExpr?: string;
+	/** Windows ターゲット用の Shift 出力式（省略時は shiftExpr を使用） */
+	winShiftExpr?: string;
 }
 
 // Conversion-specific entries: [kanataName, aliasName, normalExpr, shiftExpr, needsReleaseKey, displayOverrides?]
-type ConvEntry = [string, string, string, string, boolean, Partial<{ jN: string; jS: string; uN: string; uS: string; keN: string; keS: string }>?];
+type ConvEntry = [string, string, string, string, boolean, Partial<{ jN: string; jS: string; uN: string; uS: string; keN: string; keS: string; wN: string; wS: string }>?];
 
 const CONV_ENTRIES: ConvEntry[] = [
 	['grv', 'jus-grv', 'S-[', 'S-=', true, { jS: '\u2014' }],
@@ -51,15 +56,15 @@ const CONV_ENTRIES: ConvEntry[] = [
 	['8', 'jus-8', '8', "S-'", true],
 	['9', 'jus-9', '9', 'S-8', true],
 	['0', 'jus-0', '0', 'S-9', true],
-	['-', 'jus-min', '-', 'S-ro', true, { keS: 'ro' }],
+	['-', 'jus-min', '-', 'S-ro', true, { keS: 'ro', wS: '(multi lsft (arbitrary-code 226))' }],
 	['=', 'jus-eq', 'S--', 'S-;', true],
 	['[', 'jus-lbr', ']', 'S-]', true],
 	[']', 'jus-rbr', '\\', 'S-\\', true],
 	[';', 'jus-scl', ';', "'", true],
 	["'", 'jus-quo', 'S-7', 'S-2', true],
-	['\\', 'jus-bsl', 'ro', 'S-\u00A5', true, { keN: '\u00A5' }],
-	['\u00A5', 'jus-yen', 'ro', 'S-\u00A5', false, { keN: '\u00A5' }],
-	['ro', 'jus-ro', 'ro', 'S-\u00A5', false, { jN: '\\', uN: '\\', uS: '|', keN: '\u00A5' }],
+	['\\', 'jus-bsl', 'ro', 'S-\u00A5', true, { keN: '\u00A5', wN: '(arbitrary-code 226)', wS: '(multi lsft (arbitrary-code 220))' }],
+	['\u00A5', 'jus-yen', 'ro', 'S-\u00A5', false, { keN: '\u00A5', wN: '(arbitrary-code 226)', wS: '(multi lsft (arbitrary-code 220))' }],
+	['ro', 'jus-ro', 'ro', 'S-\u00A5', false, { jN: '\\', uN: '\\', uS: '|', keN: '\u00A5', wN: '(arbitrary-code 226)', wS: '(multi lsft (arbitrary-code 220))' }],
 ];
 
 /**
@@ -81,6 +86,8 @@ export const JIS_TO_US_MAPPINGS: readonly JisToUsMapping[] = CONV_ENTRIES.map((e
 		usShift: ov?.uS ?? meta.usShift ?? '',
 		keNormalExpr: ov?.keN,
 		keShiftExpr: ov?.keS,
+		winNormalExpr: ov?.wN,
+		winShiftExpr: ov?.wS,
 	};
 });
 
@@ -98,3 +105,13 @@ export const JIS_TO_US_MAP_BY_KEY = new Map<string, JisToUsMapping>(
 export const JIS_TO_US_MAP_BY_KANATA_NAME = new Map<string, JisToUsMapping>(
 	JIS_TO_US_MAPPINGS.map((m) => [m.kanataDefsrcName, m])
 );
+
+/** ターゲット OS に応じた normalExpr を返す */
+export function resolveNormalExpr(m: JisToUsMapping, target: KbdTargetOs): string {
+	return target === 'windows' ? (m.winNormalExpr ?? m.normalExpr) : m.normalExpr;
+}
+
+/** ターゲット OS に応じた shiftExpr を返す */
+export function resolveShiftExpr(m: JisToUsMapping, target: KbdTargetOs): string {
+	return target === 'windows' ? (m.winShiftExpr ?? m.shiftExpr) : m.shiftExpr;
+}

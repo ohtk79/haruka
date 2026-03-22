@@ -39,6 +39,9 @@ test-output/
 /playwright-report/
 /blob-report/
 
+# 実機テストレポート
+haruka-test-*.json
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
