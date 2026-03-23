@@ -23,6 +23,7 @@
   "export_ahkSourceKeyNotMapped": "This input key cannot be converted to AHK: {layerName} / {keyId} / {keyName}",
   "export_ahkTargetKeyNotMapped": "This output key cannot be converted to AHK: {layerName} / {keyId} / {keyName}",
   "export_ahkVariantNormalized": "{layerName} / {keyId}: output {originalVariant} as {convertedVariant}",
+  "export_ahkKanataRecommended": "kanata (.kbd) is recommended for {keyNames} tap-hold",
   "export_kbdWinterceptNotice": "This config includes definitions for the Interception driver (wintercept). Please start kanata with the --wintercept option.",
 
   "dialog_newFile_title": "Confirm New File",

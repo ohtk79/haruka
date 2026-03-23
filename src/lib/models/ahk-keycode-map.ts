@@ -111,7 +111,7 @@ export const KANATA_TO_AHK_MAP: Readonly<Record<string, AhkKeyMapping>> = {
 		category: 'jis'
 	},
 	kana: {
-		hotkeyToken: 'vkF2',
+		hotkeyToken: 'SC070',
 		sendToken: 'vkF2',
 		sendMode: 'key',
 		virtualKeyCode: 'vkF2',
@@ -140,7 +140,7 @@ export const KANATA_TO_AHK_MAP: Readonly<Record<string, AhkKeyMapping>> = {
 		category: 'jis'
 	},
 	'jp-kana': {
-		hotkeyToken: 'vkF2',
+		hotkeyToken: 'SC070',
 		sendToken: 'vkF2',
 		sendMode: 'key',
 		virtualKeyCode: 'vkF2',

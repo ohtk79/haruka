@@ -23,6 +23,7 @@
   "export_ahkSourceKeyNotMapped": "AHK の入力キーに変換できません: {layerName} / {keyId} / {keyName}",
   "export_ahkTargetKeyNotMapped": "AHK の出力キーに変換できません: {layerName} / {keyId} / {keyName}",
   "export_ahkVariantNormalized": "{layerName} / {keyId}: {originalVariant} を {convertedVariant} として出力します",
+  "export_ahkKanataRecommended": "{keyNames} の tap-hold には kanata (.kbd) の使用を推奨します",
   "export_kbdWinterceptNotice": "この設定には Interception ドライバー (wintercept) 向けの定義が含まれます。kanata を --wintercept オプション付きで起動してください。",
 
   "dialog_newFile_title": "新規作成の確認",

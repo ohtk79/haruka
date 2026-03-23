@@ -24,8 +24,8 @@ export interface ExportCompatibilityIssue {
 	message: string;
 }
 
-/** format ごとの自動変換 notice */
-export interface ExportConversionNotice {
+/** format ごとの自動変換 notice (variant 正規化) */
+export interface AhkVariantNormalizedNotice {
 	format: 'ahk';
 	code: 'AHK_VARIANT_NORMALIZED';
 	layerName: string;
@@ -35,6 +35,17 @@ export interface ExportConversionNotice {
 	message: string;
 	headerComment: string;
 }
+
+/** kanata 推奨 notice */
+export interface AhkKanataRecommendedNotice {
+	format: 'ahk';
+	code: 'AHK_KANATA_RECOMMENDED';
+	message: string;
+	headerComment: string;
+}
+
+/** format ごとの notice (discriminated union) */
+export type ExportConversionNotice = AhkVariantNormalizedNotice | AhkKanataRecommendedNotice;
 
 /** AHK generator の戻り値 */
 export interface AhkGeneratorResult {
