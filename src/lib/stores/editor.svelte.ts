@@ -77,8 +77,13 @@ export class EditorStore {
 	readonly activeLayer: Layer = $derived(this.layers[this.activeLayerIndex]);
 	readonly kbdText: string = $derived.by(() => {
 		if (!isFormatStaticallySupported(this.template, 'kbd')) return '';
-		const { template, layers, jisToUsRemap, tappingTerm, kbdTarget } = this;
-		return generateKbd({ template, layers, jisToUsRemap, tappingTerm, selectedKeyId: null, activeLayerIndex: 0 }, kbdTarget);
+		try {
+			const { template, layers, jisToUsRemap, tappingTerm, kbdTarget } = this;
+			return generateKbd({ template, layers, jisToUsRemap, tappingTerm, selectedKeyId: null, activeLayerIndex: 0 }, kbdTarget);
+		} catch {
+			// バリデーションエラー（unsupported action 等）は kbdValidation 経由で表示
+			return '';
+		}
 	});
 	readonly keResult: KeGeneratorResult = $derived.by(() => {
 		const { template, layers, jisToUsRemap, tappingTerm } = this;

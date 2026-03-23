@@ -124,7 +124,12 @@
 	}
 
 	function handlePreview() {
-		openPreviewPopup(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdTarget, (t) => store.setKbdTarget(t), store.kbdNotice, store.keUnifiedJsonText);
+		openPreviewPopup(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdTarget, (t) => {
+			store.setKbdTarget(t);
+			// クロスウィンドウコールバックでは $effect フラッシュが遅延する場合があるため、
+			// ポップアップ内容を即座に同期更新する
+			updatePopupContent(store.kbdText, store.keJsonText, store.ahkText, store.formatStatuses, store.kbdValidation, store.kbdNotice, store.keUnifiedJsonText);
+		}, store.kbdNotice, store.keUnifiedJsonText);
 	}
 
 	function handleNewFile(templateId: string) {

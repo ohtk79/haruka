@@ -295,10 +295,10 @@ function migrateActionV5(action: KeyAction): KeyAction {
 // v5 → v6 Migration: keyId/action 正規化 (Apple JIS KanaMode→Lang1Key, JIS 109 kana→jp-kana)
 // =============================================================================
 
-/** v5→v6 で逆変換が必要なアクション値（v4→v5 で誤って変換されたもの） */
+/** v5→v6 で逆変換が必要なアクション値（v4→v5 で誤って変換されたもの＋旧 kana/eisu の直接変換） */
 const V6_ACTION_REVERT: Readonly<Record<string, Record<string, string>>> = {
 	'apple-jis': { lang1: 'kana', lang2: 'eisu' },
-	'jis-109': { lang1: 'jp-kana' },
+	'jis-109': { lang1: 'jp-kana', kana: 'jp-kana', eisu: 'lang2' },
 };
 
 /** v5→v6 で keyId をリネームするマップ (テンプレート単位) */
